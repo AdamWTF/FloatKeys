@@ -6,6 +6,26 @@ namespace FloatKeys.Tests;
 public sealed class KeyboardTests
 {
     [Fact]
+    public void ApplicationShutdownCancelsRepeatsLatchesAndPendingTouchesBeforeRelease()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        var controller = new KeyboardController(backend, scheduler);
+        Tap(controller, "Ctrl"); controller.Begin(1, Find("backspace"));
+        Tap(controller, Find("Alt"), 3); controller.Begin(2, Find("a"));
+        var lifetime = new FloatKeys.Services.ShutdownCoordinator(_ => { });
+        lifetime.Add("controller", controller.Dispose);
+        lifetime.Add("input", () => backend.ReleaseAllKeys());
+        lifetime.Stop(); lifetime.Stop();
+        int submitted = backend.Calls.Count;
+        foreach (var tick in scheduler.Ticks) tick.Fire();
+        controller.End(2, true);
+        Assert.Equal(submitted, backend.Calls.Count);
+        Assert.Equal(0, controller.InteractionCount);
+        Assert.False(controller.Shift || controller.Ctrl || controller.Alt);
+        Assert.False(controller.Begin(3, Find("a")));
+        Assert.True(backend.Cleanups >= 2);
+    }
+    [Fact]
     public void HideStopsRepeatsAndLatchesButRetainsCapsLayoutAndController()
     {
         var backend = new Backend(); var scheduler = new Scheduler();

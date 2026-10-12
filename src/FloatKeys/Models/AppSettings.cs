@@ -10,6 +10,7 @@ internal sealed record AppSettings
     public double LauncherOpacity { get; init; } = .85;
     public string Layout { get; init; } = "uk";
     public bool Symbols { get; init; }
+    public bool StartWithWindows { get; init; }
     public string Theme { get; init; } = "dark";
 
     internal AppSettings Validate()

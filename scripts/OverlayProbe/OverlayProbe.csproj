@@ -5,6 +5,7 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
     <!-- Uses the existing test-only internals grant; no product diagnostic endpoints. -->
     <AssemblyName>FloatKeys.Tests</AssemblyName>
     <ApplicationManifest>../../src/FloatKeys/app.manifest</ApplicationManifest>

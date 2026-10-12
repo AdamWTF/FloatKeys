@@ -16,6 +16,7 @@ using FloatKeys.Windows;
 internal static class Program
 {
     [DllImport("user32.dll")] private static extern nint SendMessageW(nint hwnd, int message, nint wParam, nint lParam);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int RegisterWindowMessageW(string message);
     [STAThread]
     private static void Main()
     {
@@ -25,12 +26,24 @@ internal static class Program
         Directory.CreateDirectory(directory);
         string path = Path.Combine(directory, "settings-" + Guid.NewGuid().ToString("N") + ".json");
         nint foreground = NativeMethods.GetForegroundWindow();
-        using (var overlay = new OverlayService(backend, new PrototypeLog(), new SettingsService(path)))
+        using (var overlay = new OverlayService(backend, new AppLog(), new SettingsService(path)))
         {
             overlay.Show(); Pump();
             var launcher = Field<LauncherWindow>(overlay, "launcher");
             var keyboard = Field<KeyboardWindow>(overlay, "keyboard");
             var visibility = Field<OverlayVisibility>(overlay, "visibility");
+            bool stopping = false;
+            var trayController = new TrayController(overlay, new StartupService(new ProbeStartupStore(), null, _ => { }),
+                () => stopping, () => stopping = true, message => throw new Exception(message));
+            using var tray = new TrayService(trayController, message => throw new Exception(message));
+            var notifyIcon = Field<System.Windows.Forms.NotifyIcon>(tray, "icon");
+            Check(notifyIcon.Visible, "tray icon available");
+            var trayWindow = Field<System.Windows.Forms.NativeWindow>(notifyIcon, "_window");
+            nint trayHwnd = trayWindow.Handle;
+            int explorerMessage = RegisterWindowMessageW("TaskbarCreated");
+            Check(explorerMessage != 0, "Explorer restart message available");
+            SendMessageW(trayHwnd, explorerMessage, 0, 0); Pump();
+            Check(notifyIcon.Visible && trayWindow.Handle == trayHwnd && Field<bool>(notifyIcon, "_added"), "tray restored after simulated Explorer restart");
             nint lh = new WindowInteropHelper(launcher).Handle, kh = new WindowInteropHelper(keyboard).Handle;
             Check(launcher.IsVisible && !keyboard.IsVisible, "launcher-only startup");
             foreach (nint hwnd in new[] { lh, kh })
@@ -59,6 +72,20 @@ internal static class Program
             NativeMethods.GetWindowRect(kh, out var after);
             Check(before.Pixels == after.Pixels, "bounds survive show/hide");
             Check(File.GetLastWriteTimeUtc(path) == savedTime, "show/hide avoids settings writes");
+            Check(ReferenceEquals(notifyIcon, Field<System.Windows.Forms.NotifyIcon>(tray, "icon")), "one tray object across visibility cycles");
+            overlay.ShowKeyboard(); Pump();
+            keyboard.Close(); Pump();
+            Check(!keyboard.IsVisible && launcher.IsVisible, "keyboard native close hides only keyboard");
+            launcher.Close(); Pump();
+            Check(!keyboard.IsVisible && !launcher.IsVisible, "both native windows can hide without shutdown");
+            overlay.ShowKeyboard(); overlay.ShowLauncher(); Pump();
+            Check(new WindowInteropHelper(keyboard).Handle == kh && new WindowInteropHelper(launcher).Handle == lh, "close-hide preserves HWNDs");
+            Check(NativeMethods.GetForegroundWindow() == foreground, "restore foreground preservation");
+            overlay.SetStartupPreference(true);
+            overlay.ShowSettings();
+            Check(!((Grid)keyboard.FindName("KeyRows")).IsEnabled, "tray settings opens inline panel");
+            Check(new SettingsService(path).Load().StartWithWindows, "startup preference shares geometry settings");
+            overlay.HideKeyboard(); Pump();
             visibility.Show(); Pump();
             // Drive the service's pointer callbacks without moving the real cursor or injecting input.
             Gesture(launcher.Handle, new(0, 0), new(-20, 0));
@@ -86,16 +113,25 @@ internal static class Program
             Released((KeyboardKey)header.Children[2]);
             Check(!keyboard.IsVisible && launcher.IsVisible, "header collapse leaves launcher");
             visibility.Hide();
-            Console.WriteLine($"PASS lifecycle architecture={RuntimeInformation.ProcessArchitecture} cycles=50 styles=0x08000088 sameHWND=true boundsPreserved=true foregroundPreserved=true cleanups={backend.Cleanups}");
+            bool exitRequested = false;
+            overlay.ExitRequested += () => exitRequested = true;
+            visibility.Show(); Pump();
+            Released((KeyboardKey)header.Children[3]);
+            Check(exitRequested, "header Exit routes to application lifetime");
+            var trayItems = Field<Dictionary<TrayCommand, System.Windows.Forms.ToolStripMenuItem>>(tray, "items");
+            trayItems[TrayCommand.Exit].PerformClick();
+            Check(stopping, "tray Exit routes to application lifetime");
+            Console.WriteLine($"PASS lifecycle architecture={RuntimeInformation.ProcessArchitecture} cycles=50 closeHides=true sameHWND=true foregroundPreserved=true cleanups={backend.Cleanups}");
         }
         Pump();
         Check(NativeMethods.GetForegroundWindow() == foreground, "shutdown foreground preservation");
+        Check(new SettingsService(path).Load().StartWithWindows, "shutdown preserves startup preference in final settings snapshot");
         File.Delete(path);
 
         foreach (bool symbols in new[] { false, true })
         foreach (var size in new[] { new Size(840, 360), new Size(720, 360), new Size(1000, 480) })
         {
-            var window = new KeyboardWindow(backend, new PrototypeLog(), symbols);
+            var window = new KeyboardWindow(backend, new AppLog(), symbols);
             var root = (FrameworkElement)window.Content;
             root.Measure(size); root.Arrange(new Rect(size)); root.UpdateLayout();
             var keys = Descendants(root).OfType<KeyboardKey>().ToArray();
@@ -108,14 +144,14 @@ internal static class Program
             Console.WriteLine($"PASS render layout={(symbols ? "symbols" : "qwerty")} size={size} minKey={keys.Min(k => k.ActualWidth):F1}x{keys.Min(k => k.ActualHeight):F1} dpi=96,144,192");
             window.Close();
         }
-        var settingsWindow = new KeyboardWindow(backend, new PrototypeLog());
+        var settingsWindow = new KeyboardWindow(backend, new AppLog());
         var panel = (UIElement)settingsWindow.FindName("SettingsPanel");
         panel.Visibility = Visibility.Visible;
         var settingsRoot = (FrameworkElement)settingsWindow.Content;
         settingsRoot.Measure(new(720, 360)); settingsRoot.Arrange(new Rect(0, 0, 720, 360)); settingsRoot.UpdateLayout();
         Render(settingsRoot, new(720, 360), 192, Path.Combine(directory, "settings.png"));
         settingsWindow.Close();
-        var small = new KeyboardWindow(backend, new PrototypeLog());
+        var small = new KeyboardWindow(backend, new AppLog());
         var smallRoot = (FrameworkElement)small.Content;
         smallRoot.Measure(new(600, 300)); smallRoot.Arrange(new Rect(0, 0, 600, 300)); smallRoot.UpdateLayout();
         var scroll = Descendants(smallRoot).OfType<ScrollViewer>().First();
@@ -177,5 +213,11 @@ internal static class Program
         public InputResult SendUnicodeText(string text) => throw new Exception();
         public InputResult ReleaseAllKeys() { Cleanups++; return new(0, 0, 0, false, null); }
         public void Dispose() { }
+    }
+    private sealed class ProbeStartupStore : IStartupStore
+    {
+        public string? Read() => null;
+        public void Write(string command) => throw new Exception("Probe cannot modify startup registration.");
+        public void Remove() => throw new Exception("Probe cannot modify startup registration.");
     }
 }

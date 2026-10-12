@@ -10,7 +10,7 @@ namespace FloatKeys.Windows;
 public partial class KeyboardWindow : Window
 {
     private readonly KeyboardController controller;
-    private readonly PrototypeLog log;
+    private readonly AppLog log;
     private readonly List<(KeyboardKey Control, KeyDefinition Definition)> controls = [];
     private bool shownSymbols;
     private bool closing;
@@ -20,12 +20,14 @@ public partial class KeyboardWindow : Window
     internal PointerHandle ResizeHandle { get; }
     internal bool Symbols => controller.Symbols;
     internal event Action? CollapseRequested;
+    internal event Action? DismissRequested;
+    internal bool AllowClose { get; set; }
     internal event Action? ExitRequested;
     internal event Action? LayoutChanged;
     internal event Action<int>? SizeStep;
     internal event Action<int>? OpacityStep;
 
-    internal KeyboardWindow(IInputBackend input, PrototypeLog log, bool symbols = false)
+    internal KeyboardWindow(IInputBackend input, AppLog log, bool symbols = false)
     {
         this.log = log;
         controller = new KeyboardController(input, new DispatcherRepeatScheduler(), symbols: symbols);
@@ -38,8 +40,14 @@ public partial class KeyboardWindow : Window
         controller.InputFailed += CancelControls;
         controller.ExitRequested += () => ExitRequested?.Invoke();
         BuildKeys();
-        Closing += (_, _) =>
+        Closing += (_, e) =>
         {
+            if (!AllowClose && DismissRequested is not null)
+            {
+                e.Cancel = true;
+                DismissRequested.Invoke();
+                return;
+            }
             closing = true;
             controller.Dispose();
             CancelControls();
@@ -94,7 +102,6 @@ public partial class KeyboardWindow : Window
         key.SetAppearance(definition.Style, controller.Active(definition));
         key.Captured += pointer =>
         {
-            log.Write($"interaction begin foreground=0x{NativeMethods.GetForegroundWindow():X}");
             if (!controller.Begin(pointer, definition)) key.Cancel();
         };
         key.Released += (pointer, inside) => controller.End(pointer, inside);
@@ -155,15 +162,20 @@ public partial class KeyboardWindow : Window
         SettingsPanel.Visibility = Visibility.Collapsed;
         KeyRows.IsEnabled = true;
     }
+    internal void ShowSettings()
+    {
+        CancelInteractions();
+        SettingsPanel.Visibility = Visibility.Visible;
+        KeyRows.IsEnabled = false;
+    }
     private void ShowResult(InputResult result)
     {
-        log.Write($"input result foreground=0x{NativeMethods.GetForegroundWindow():X}");
         if (result.Success) Status.Text = "Submitted to Windows; verify the target received it.";
         else
         {
-            Status.Text = result.CleanupFailed ? "Release failed. Cancel a tap or exit to retry; see prototype.log." :
+            Status.Text = result.CleanupFailed ? "Release failed. Cancel a tap or exit to retry; see FloatKeys logs." :
                 $"{result.Error} ({result.Submitted}/{result.Requested}, error {result.NativeError})";
-            log.Write($"error={result.Error} cleanupFailed={result.CleanupFailed}");
+            log.Write($"input failed requested={result.Requested} submitted={result.Submitted} nativeError={result.NativeError} cleanupFailed={result.CleanupFailed}");
         }
     }
 }

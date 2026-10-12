@@ -1,3 +1,77 @@
+# Milestone 4 architecture
+
+`App` acquires a Local-session named mutex keyed by the current user's SID before
+creating any overlays, input or tray resources. Secondary launches exit quietly.
+The mutex is held on the UI thread, handles abandoned ownership and is released
+only after application cleanup. There is no IPC or process termination policy.
+
+One `TrayService` owns a Windows Forms NotifyIcon, ContextMenuStrip and embedded
+icon on the existing WPF dispatcher. .NET's NotifyIcon restores itself when Explorer
+broadcasts TaskbarCreated. There are no polling timers or background message loops.
+TrayController provides testable routing through IOverlayCommands; StartupService
+uses an injectable IStartupStore. These are internal interfaces, not public APIs.
+
+OverlayService still owns one launcher, keyboard and controller for its lifetime.
+Keyboard and launcher visibility are independent. Normal native closure is intercepted
+before controller disposal and hides only that window. Hidden launchers are excluded
+from ordering. Settings opens the existing inline panel. Existing header Exit and tray
+Exit share the application lifetime coordinator. All native non-activation styles,
+SWP_NOACTIVATE flags, touch routing, geometry and key mappings remain intact.
+
+ShutdownCoordinator runs guarded cleanup stages once. Overlay cleanup cancels gestures,
+repeats and latches, saves a final snapshot before destroying HWNDs and detaches hooks;
+backend disposal retries owned key releases; tray resources/subscriptions and instance
+ownership are then disposed. An error in one stage is logged without skipping later
+stages. Session-ending queries cancel input and save while retaining HWNDs/ownership,
+since another app can cancel sign-out. Confirmed session termination runs final cleanup.
+
+Startup uses only HKCU's Run key, value FloatKeys, containing the quoted current
+FloatKeys.exe path. No arguments, service, task or elevation are used. Missing entries
+disable the saved preference; valid existing entries are adopted/repaired after relocation.
+Unexpected entries are left intact. Menu opening reconciles Windows registration;
+Windows Startup Apps policy can independently suppress that registered entry.
+StartWithWindows defaults false in legacy settings and shares OverlayService's existing
+settings snapshot, preventing geometry saves from reverting startup changes.
+
+AppLog writes only lifecycle/failure diagnostics to LocalAppData/FloatKeys/logs,
+rotating one previous file at approximately 1 MiB. Successful input and touch actions
+are not logged. Logs contain no key identities, input text, arbitrary exception messages,
+clipboard content or telemetry. Unwritable logging never prevents input or cleanup.
+
+The executable, window and tray icon share a deterministic seven-size ICO generated
+by scripts/generate-icon.ps1 from the launcher glyph. The ICO is committed, embedded
+for tray use and included as a WPF resource. No graphics package is required.
+SDK/version metadata and lock files are committed. The packaging script validates
+native runtime-pack architecture and actual single-file manifest assets, then creates
+two archives/checksums. Windows CoreCLR/JIT are statically linked into singlefilehost;
+the WPF native libraries are bundled for extraction. Trimming stays disabled.
+
+## Milestone 4 file inventory
+
+Added:
+
+- global.json, Directory.Build.props; application/test/probe packages.lock.json files
+- Platform/SingleInstance.cs; Services/StartupService.cs, TrayController.cs,
+  TrayService.cs, ShutdownCoordinator.cs, AppLog.cs; Resources/FloatKeys.ico
+- scripts/generate-icon.ps1, package.ps1, verify-packages.ps1, BundleInspector.cs
+- .github/workflows/ci.yml, release.yml
+- tests/FloatKeys.Tests/WindowsIntegrationTests.cs
+- docs/releases.md, release-notes.md, portable.txt
+
+Modified:
+
+- App.xaml.cs, application/test/probe project files, Models/AppSettings.cs
+- Services/OverlayService.cs, SettingsService.cs; Input/SendInputBackend.cs
+- KeyboardWindow XAML/code-behind and LauncherWindow XAML (icon only)
+- KeyboardTests.cs; development probe and verify-overlay.ps1
+- README.md, architecture.md, compatibility.md
+
+PrototypeLog.cs is replaced by AppLog.cs. App.xaml already had explicit shutdown,
+so it needs no edit. No layout, pointer-control or input-ABI redesign was performed.
+
+The following Milestone 3/2 sections are historical. Milestone 4 supersedes their
+native-close-to-exit behavior, prototype logging and deferred packaging statements.
+
 # Milestone 3 architecture
 
 ## Overlay lifecycle and focus

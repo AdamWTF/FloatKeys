@@ -11,11 +11,11 @@ using FloatKeys.Windows;
 
 namespace FloatKeys.Services;
 
-internal sealed class OverlayService : IDisposable
+internal sealed class OverlayService : IDisposable, IOverlayCommands
 {
     private readonly KeyboardWindow keyboard;
     private readonly LauncherWindow launcher;
-    private readonly PrototypeLog log;
+    private readonly AppLog log;
     private readonly SettingsService storage;
     private readonly OverlayVisibility visibility;
     private readonly List<(HwndSource Source, HwndSourceHook Hook)> hooks = [];
@@ -25,7 +25,29 @@ internal sealed class OverlayService : IDisposable
     private bool disposed, displayQueued, orderQueued, started;
     private bool interruptDisplayGestures;
 
-    internal OverlayService(IInputBackend input, PrototypeLog log, SettingsService? settingsService = null)
+    internal event Action? ExitRequested;
+    public bool KeyboardVisible => visibility.Visible;
+    public bool LauncherVisible => launcher.IsVisible;
+    public void ShowKeyboard() { if (!disposed) visibility.Show(); }
+    public void HideKeyboard() { if (!disposed) visibility.Hide(); }
+    public void ShowLauncher()
+    {
+        if (disposed || launcher.IsVisible) return;
+        RepairBounds(); launcher.Show(); OrderLauncher();
+    }
+    public void HideLauncher()
+    {
+        if (disposed || !launcher.IsVisible) return;
+        launcher.Handle.Cancel(); Save(); launcher.Hide();
+    }
+    public void ShowSettings() { ShowKeyboard(); keyboard.ShowSettings(); }
+    public void SetStartupPreference(bool enabled)
+    {
+        settings = settings with { StartWithWindows = enabled };
+        Save();
+    }
+
+    internal OverlayService(IInputBackend input, AppLog log, SettingsService? settingsService = null)
     {
         this.log = log;
         storage = settingsService ?? new(log: log.Write);
@@ -40,16 +62,23 @@ internal sealed class OverlayService : IDisposable
             Save();
         }, () => { keyboard.CancelGeometry(); keyboard.CancelInteractions(); }, keyboard.Hide);
         keyboard.CollapseRequested += visibility.Hide;
-        keyboard.ExitRequested += () => Application.Current.Shutdown();
+        keyboard.ExitRequested += OnExitRequested;
         keyboard.LayoutChanged += Save;
         keyboard.SizeStep += step => ChangePreferences(step * 8, 0);
         keyboard.OpacityStep += step => ChangePreferences(0, step * .05);
-        // Closing either native window means exit; Collapse exclusively uses Hide.
-        launcher.Closed += (_, _) => { if (!disposed) Application.Current.Shutdown(); };
-        keyboard.Closed += (_, _) => { if (!disposed) Application.Current.Shutdown(); };
+        launcher.Closing += LauncherClosing;
+        keyboard.DismissRequested += HideKeyboard;
         BindGesture(launcher.Handle, launcher, false, visibility.Toggle);
         BindGesture(keyboard.DragHandle, keyboard, false);
         BindGesture(keyboard.ResizeHandle, keyboard, true);
+    }
+
+    private void OnExitRequested() => ExitRequested?.Invoke();
+    private void LauncherClosing(object? sender, CancelEventArgs e)
+    {
+        if (disposed) return;
+        e.Cancel = true;
+        HideLauncher();
     }
 
     internal void Show()
@@ -68,7 +97,7 @@ internal sealed class OverlayService : IDisposable
         OrderLauncher();
         started = true;
         Save();
-        log.Write($"show launcher=0x{launcherHwnd:X} keyboard=0x{keyboardHwnd:X} foregroundBefore=0x{before:X} foregroundAfter=0x{NativeMethods.GetForegroundWindow():X}");
+        log.Write("overlays initialised");
     }
 
     private nint Prepare(Window window)
@@ -227,6 +256,7 @@ internal sealed class OverlayService : IDisposable
     }
     private void OrderLauncher()
     {
+        if (!launcher.IsVisible) return;
         if (keyboardHwnd != 0 && keyboard.IsVisible)
         {
             // Raising an already-ordered topmost window can notify the keyboard again.
@@ -238,17 +268,30 @@ internal sealed class OverlayService : IDisposable
         if (launcherHwnd != 0 && !NativeMethods.SetWindowPos(launcherHwnd, -1, 0, 0, 0, 0, 0x0010 | 0x0001 | 0x0002))
             throw new Win32Exception(Marshal.GetLastPInvokeError());
     }
+    internal void PrepareForSessionEnding()
+    {
+        ShutdownCoordinator.Try("launcher cancellation", launcher.Handle.Cancel, log.Write);
+        ShutdownCoordinator.Try("keyboard geometry cancellation", keyboard.CancelGeometry, log.Write);
+        ShutdownCoordinator.Try("keyboard input cancellation", keyboard.CancelInteractions, log.Write);
+        Save();
+    }
     public void Dispose()
     {
         if (disposed) return;
-        launcher.Handle.Cancel();
-        keyboard.CancelGeometry();
-        keyboard.CancelInteractions();
-        Save();
+        ShutdownCoordinator.Try("launcher cancellation", launcher.Handle.Cancel, log.Write);
+        ShutdownCoordinator.Try("keyboard geometry cancellation", keyboard.CancelGeometry, log.Write);
+        ShutdownCoordinator.Try("keyboard input cancellation", keyboard.CancelInteractions, log.Write);
+        ShutdownCoordinator.Try("settings exit save", Save, log.Write);
         disposed = true;
-        foreach (var (source, hook) in hooks) if (!source.IsDisposed) source.RemoveHook(hook);
+        foreach (var (source, hook) in hooks)
+            ShutdownCoordinator.Try("window hook removal", () => { if (!source.IsDisposed) source.RemoveHook(hook); }, log.Write);
         hooks.Clear();
-        keyboard.Close();
-        launcher.Close();
+        launcher.Closing -= LauncherClosing;
+        keyboard.DismissRequested -= HideKeyboard;
+        keyboard.ExitRequested -= OnExitRequested;
+        keyboard.LayoutChanged -= Save;
+        keyboard.AllowClose = true;
+        ShutdownCoordinator.Try("keyboard close", keyboard.Close, log.Write);
+        ShutdownCoordinator.Try("launcher close", launcher.Close, log.Write);
     }
 }

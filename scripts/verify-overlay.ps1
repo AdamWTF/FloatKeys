@@ -11,6 +11,11 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 public static class OverlayProbe {
+    public static System.Collections.Generic.List<IntPtr> Windows(uint pid) {
+        var result = new System.Collections.Generic.List<IntPtr>();
+        EnumWindows((h, p) => { GetWindowThreadProcessId(h, out uint owner); if (owner == pid) result.Add(h); return true; }, IntPtr.Zero);
+        return result;
+    }
     public delegate bool EnumCallback(IntPtr window, IntPtr parameter);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumCallback callback, IntPtr parameter);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
@@ -58,6 +63,9 @@ try {
     $keyboardStyles = [OverlayProbe]::GetWindowLongPtr($keyboardHandle, -20).ToInt64()
     if (($keyboardStyles -band $expectedStyles) -ne $expectedStyles -or ($keyboardStyles -band 0x00040000) -ne 0) { throw 'Invalid keyboard styles.' }
     if ([OverlayProbe]::IsWindowVisible($keyboardHandle)) { throw 'Keyboard must start hidden.' }
+    $secondProcess = Start-Process -FilePath $resolvedExecutable -WindowStyle Hidden -PassThru
+    if (!$secondProcess.WaitForExit(5000) -or $secondProcess.ExitCode -ne 0) { throw 'Second instance did not exit quietly.' }
+    if ($prototypeProcess.HasExited) { throw 'Existing instance was terminated by secondary launch.' }
     $foregroundAfter = [OverlayProbe]::GetForegroundWindow()
     if ($foregroundAfter -eq $overlayHandle) { throw 'Prototype became foreground during startup.' }
     if ($foregroundAfter -ne $foregroundBefore) { throw 'Foreground changed during smoke check; repeat without interacting with other windows.' }
@@ -65,13 +73,24 @@ try {
 }
 finally {
     if ($overlayHandle -ne [IntPtr]::Zero) {
-        [void][OverlayProbe]::PostMessageW($overlayHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) # WM_CLOSE, graceful cleanup
+        [void][OverlayProbe]::PostMessageW($overlayHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) # WM_CLOSE must hide only.
+        Start-Sleep -Milliseconds 300
+        if ($prototypeProcess.HasExited) { throw 'Native window closure unexpectedly terminated FloatKeys.' }
+        if ([OverlayProbe]::IsWindowVisible($overlayHandle)) { throw 'Native window closure did not hide the launcher.' }
+        # Simulate session-ending messages only on this test process, never broadcast/log off Windows.
+        # WPF receives session notifications through an application-owned hidden HWND,
+        # not the overlay HWND. Reproduce the broadcast only within this process.
+        $sessionWindows = [OverlayProbe]::Windows([uint32]$prototypeProcess.Id)
+        foreach ($window in $sessionWindows) { [void][OverlayProbe]::PostMessageW($window, 0x0011, [IntPtr]::Zero, [IntPtr]::Zero) }
+        Start-Sleep -Milliseconds 100
+        foreach ($window in $sessionWindows) { [void][OverlayProbe]::PostMessageW($window, 0x0016, [IntPtr]1, [IntPtr]::Zero) }
     }
     if (!$prototypeProcess.WaitForExit(5000)) {
         throw "Prototype process $($prototypeProcess.Id) did not exit; close it manually."
     }
     if ($prototypeProcess.ExitCode -ne 0) { throw "Prototype exited with code $($prototypeProcess.ExitCode)." }
     if ([OverlayProbe]::GetForegroundWindow() -ne $foregroundBefore) { throw 'Foreground changed during shutdown.' }
+    'PASS secondaryInstanceRejected=true closeHides=true sessionShutdown=true processExited=true'
 }
 if ($LifecycleProbe) {
     & (Resolve-Path -LiteralPath $LifecycleProbe).Path

@@ -1,0 +1,22 @@
+FloatKeys v0.1.0 - portable Windows 11 touchscreen keyboard
+
+Extract the complete archive into a permanent folder. Run FloatKeys.exe as an
+ordinary user; no installer or separate .NET runtime is needed. Choose win-arm64
+for Surface Pro 11 and win-x64 for conventional x64 Windows PCs.
+
+Tap the launcher to show/hide the keyboard. Focus your target input field first.
+Use the system tray menu to show/hide either overlay, configure Start with Windows,
+open existing inline settings, or Exit FloatKeys. Closing an overlay hides it.
+The tray icon may be inside Windows' notification-area overflow.
+
+Settings: %LOCALAPPDATA%\FloatKeys\settings.json
+Diagnostics: %LOCALAPPDATA%\FloatKeys\logs\
+Startup: per-user Run registry entry; disabled initially. If you move an enabled
+portable copy, run it from its new folder once to repair its startup path.
+Removing the registry entry externally disables startup; FloatKeys respects this.
+
+Use the UK keyboard layout. Caps is local to FloatKeys. Synthetic input may be
+rejected by games, elevated applications and streaming clients. Secure desktop,
+UAC and protected authentication screens are unsupported. Exclusive fullscreen
+may obscure the overlay. Moonlight/WoW compatibility requires physical testing.
+No telemetry, clipboard collection, privileged input, services or drivers.

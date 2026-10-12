@@ -21,7 +21,11 @@ internal sealed class SettingsService
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
-            if (document.RootElement.ValueKind != JsonValueKind.Object) return new();
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                log?.Invoke("settings defaults: invalid document shape");
+                return new();
+            }
             bool repaired = false;
             T Read<T>(JsonElement parent, string name, T fallback)
             {
@@ -42,9 +46,11 @@ internal sealed class SettingsService
                 Launcher = Window("Launcher", defaults.Launcher), Keyboard = Window("Keyboard", defaults.Keyboard),
                 LauncherOpacity = Read(document.RootElement, "LauncherOpacity", .85),
                 Symbols = Read(document.RootElement, "Symbols", false),
+                StartWithWindows = Read(document.RootElement, "StartWithWindows", false),
                 Layout = Read(document.RootElement, "Layout", "uk"), Theme = Read(document.RootElement, "Theme", "dark")
             };
             var valid = raw.Validate();
+            if (repaired || raw != valid) log?.Invoke("settings invalid fields repaired");
             saved = !repaired && raw == valid ? valid : null;
             return valid;
         }
@@ -80,7 +86,7 @@ internal sealed class SettingsService
         finally
         {
             try { if (File.Exists(temporary)) File.Delete(temporary); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log?.Invoke($"settings temporary cleanup failed: {e.GetType().Name}"); }
         }
     }
 }

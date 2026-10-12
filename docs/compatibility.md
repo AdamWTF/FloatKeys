@@ -1,3 +1,110 @@
+# Milestone 4 verification — 12 October 2026
+
+Host: Windows ARM64 with .NET SDK 10.0.300. x64 execution uses Windows ARM
+emulation and does not establish compatibility on physical x64 hardware.
+
+| Check | Result | What it establishes |
+|---|---|---|
+| Locked solution restore | Pass | Committed dependency graph restores |
+| Release solution build | Pass, 0 warnings/errors | Compilation |
+| ARM64 automated suite | Pass, 183/183, 0 skipped | Existing keyboard tests plus Windows integration tests |
+| Self-contained x64 automated suite | Pass, 183/183, 0 skipped | Same checks under ARM emulation |
+| win-arm64 portable publish | Pass | Self-contained single executable |
+| win-x64 portable publish | Pass | Self-contained single executable |
+| Native runtime packs and bundle inspection | Pass, both architectures | Correct PE architecture; required WPF native libraries bundled |
+| Archive names/content/SHA-256 | Pass | Two independent v0.1.0 archives, checksums verified |
+| Final archive extraction/startup | Pass, both architectures | Extracted release executables launch, reject duplicates and terminate cleanly |
+| ARM64 published executable smoke | Pass | Non-activation, second-instance rejection, close-to-hide, session shutdown/process termination |
+| x64 published executable smoke | Pass under emulation | Same checks |
+| ARM64/x64 isolated STA probes | Pass | 50 visibility cycles, retained HWNDs, tray object lifetime, Settings/Exit routing, native closure/restoration |
+| Simulated TaskbarCreated | Pass, both probes | Framework tray re-registration callback; no actual Explorer restart |
+| Workflow syntax | Pass, actionlint 1.7.12 | CI and release YAML/action inputs checked locally |
+| PowerShell syntax and icon generation | Pass | Scripts parse; ICO regeneration has identical SHA-256 |
+
+The smoke script sends session messages only to HWNDs belonging to its test process;
+it does not sign out Windows or send messages to other applications. The isolated
+probe's input backend cannot inject input, and its startup adapter cannot modify the
+registry. Startup tests use fake storage. Actual reboot startup registration and tray
+interaction with touch remain manual checks. Automated exit uses session notifications;
+tray/header Exit routing is tested separately through the shared command/controller path.
+
+Verification fixed session-query cleanup ordering, addressed session messages to WPF's
+hidden application HWND, and qualified icon resources with their owning assembly.
+An added shutdown test initially reused an active pointer ID; the test setup was corrected
+and both suites rerun successfully. Bundle validation accounts for the Windows runtime's
+statically linked CoreCLR/JIT rather than requiring separate embedded coreclr/clrjit files.
+Initial failed smoke processes were cleaned up; final checks leave no FloatKeys process.
+
+Build/test/publish/native checks used approved execution outside the restricted sandbox,
+whose SDK invocations can fail without diagnostics. No test input was submitted to a target
+application. The workflows have not run on GitHub, and no release/tag has been created.
+This checkout currently has no Git remote; publication requires configuring its repository.
+
+## Surface Pro 11 manual acceptance — pending
+
+Extract the complete FloatKeys-v0.1.0-win-arm64.zip archive into a permanent folder
+and run FloatKeys.exe as an ordinary user. Record Windows build, architecture,
+orientation, scaling, target application/client version, input layout and Pass/Fail.
+Start with physical modifiers released and UK English selected locally/remotely.
+
+1. Confirm the launcher appears, the keyboard starts hidden and the FloatKeys tray
+   icon exists, including notification-area overflow if Windows hides it there.
+2. From the tray, show/hide the keyboard repeatedly. Restore it after native close.
+   Focus Notepad before tapping the launcher; confirm the target caret stays usable.
+3. Hide/restore the launcher from the tray with the keyboard open and hidden. Hide
+   both overlays and verify the tray remains available and can restore either.
+4. Open Settings from the tray. Confirm the existing inline panel opens, covered keys
+   cannot type, and size/opacity changes still persist without activating the keyboard.
+5. Enable Start with Windows. Restart Windows; confirm exactly one launcher/tray icon
+   appears, the keyboard is hidden and FloatKeys does not automatically take focus.
+6. Disable Start with Windows and restart again. Confirm FloatKeys does not launch.
+   Enable again only if desired. If Windows Startup Apps has independently disabled
+   the entry, restore its policy deliberately; the tray does not override that policy.
+7. With startup enabled, move the portable folder and run the new copy once. Restart
+   and confirm the new path works. Removing the Run entry externally should stay disabled.
+8. Launch a second copy (also try another extracted folder). Confirm the first stays
+   running with one launcher, one keyboard and one tray icon.
+9. Type in Notepad with mouse and touch: letters, UK symbols, Shift/local Caps,
+   Ctrl/Alt combinations, arrows and held Backspace. Verify the focused field receives
+   input and there is no focus-stealing or duplicate touch regression.
+10. In Moonlight, manually focus remote Notepad and test typing/shortcuts/repeats.
+    Record windowed and fullscreen results separately, including remote delivery and
+    local focus/overlay visibility. No compatibility claim is made until tested.
+11. In WoW Forever, manually focus chat in a harmless context and test typing,
+    punctuation, deletion/navigation and Enter. Record mode and client version.
+12. Repeat keyboard close/reopen at least 50 times. Cancel touch/drag captures,
+    hide during repeat and test display rotation/scaling. Existing movement, sizing,
+    recovery and touch behavior must continue working.
+13. Restart Windows Explorer through Task Manager while FloatKeys runs. Confirm
+    one usable tray icon returns, including when both overlays were hidden.
+14. Latch modifiers and start a repeat, then use **Exit FloatKeys** in the tray.
+    Confirm both windows disappear and Task Manager shows no FloatKeys process.
+    Repeat with the keyboard header Exit. Normal physical typing must work afterward,
+    with no continuing repeat or logically held simulated modifiers/keys.
+15. Relaunch and confirm positions, dimensions, opacity, Symbols selection and startup
+    configuration persist; launcher is visible and keyboard hidden. Review logs for
+    cleanup/settings failures. Repeat final exit with both overlays hidden.
+
+## Remaining limitations and deviations
+
+Physical Surface touch, real Explorer restart, reboot startup, mixed-DPI/display changes,
+Moonlight and WoW Forever acceptance remain pending. x64 hardware testing and hosted
+GitHub workflow execution are also pending. Synthetic input can be rejected by protected,
+elevated or raw-input targets; exclusive fullscreen can hide overlays. Secure desktop,
+UAC and protected authentication screens remain unsupported.
+
+Windows Startup Apps policy can independently disable a registered Run entry; FloatKeys
+does not bypass it. Portable relocation requires running the new copy once; an executable
+cannot repair its old path while it is not running. Mutex ownership does not guarantee
+input cleanup after a forced kill, power loss or rejected native releases.
+
+Single-file packages are unsigned and require writable temporary storage for WPF native
+extraction. There is no installer or signing service. No new Milestone 4 functional
+deviation is known. The pre-existing approved local Caps interpretation remains.
+
+The following Milestone 3/2 records are historical; their prototype logging, native-close
+exit semantics, old publish locations and deferred Milestone 4 statements are superseded.
+
 # Milestone 3 verification and Surface acceptance
 
 ## Automated verification — 12 October 2026

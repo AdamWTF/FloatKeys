@@ -127,7 +127,7 @@ public sealed class SendInputBackend : IInputBackend
         for (int i = 0; i < sent; i++) state.Apply(changes[i].Key, changes[i].Up);
         if (state.Count == 0) cleanupPending = false;
         bool success = submission.Count == changes.Length;
-        WriteLog($"submission requested={changes.Length} submitted={submission.Count} nativeError={submission.Error} owned={state.Count}");
+        if (!success) WriteLog($"submission requested={changes.Length} submitted={submission.Count} nativeError={submission.Error} owned={state.Count}");
         return new(changes.Length, sent, submission.Error, false,
             success ? null : "Windows accepted fewer input events than requested; delivery is unverified.");
     }
