@@ -1,0 +1,361 @@
+using FloatKeys.Input;
+using Xunit;
+
+namespace FloatKeys.Tests;
+
+public sealed class KeyboardTests
+{
+    private sealed class Backend : IInputBackend
+    {
+        internal readonly List<(InputKey Key, InputKey[] Modifiers)> Calls = [];
+        internal int Cleanups;
+        internal bool Fail;
+        internal bool CleanupFail;
+        public InputResult KeyPressChord(InputKey key, IReadOnlyList<InputKey> modifiers)
+        {
+            Calls.Add((key, modifiers.ToArray()));
+            return Fail ? new(4, 1, 5, false, "test failure") : new(2, 2, 0, false, null);
+        }
+        public InputResult KeyDown(InputKey key) => throw new NotSupportedException();
+        public InputResult KeyUp(InputKey key) => throw new NotSupportedException();
+        public InputResult KeyPress(InputKey key) => KeyPressChord(key, []);
+        public InputResult SendUnicodeText(string text) => throw new NotSupportedException();
+        public InputResult ReleaseAllKeys()
+        {
+            Cleanups++;
+            return CleanupFail ? new(1, 0, 5, true, "cleanup failure") : new(0, 0, 0, false, null);
+        }
+        public void Dispose() { }
+    }
+    private sealed class Scheduler : IRepeatScheduler
+    {
+        internal sealed class Tick(TimeSpan delay, Action callback) : IDisposable
+        {
+            internal TimeSpan Delay = delay;
+            internal bool Disposed;
+            internal void Fire() => callback(); // Deliberately permit stale callbacks.
+            public void Dispose() => Disposed = true;
+        }
+        internal readonly List<Tick> Ticks = [];
+        public IDisposable Schedule(TimeSpan delay, Action callback)
+        {
+            var tick = new Tick(delay, callback);
+            Ticks.Add(tick);
+            return tick;
+        }
+    }
+    private static KeyDefinition Find(string id) => KeyboardLayout.Main.Concat(KeyboardLayout.Symbols)
+        .SelectMany(r => r).First(k => k.Id == id);
+    private static void Tap(KeyboardController controller, KeyDefinition key, long pointer = 1)
+    {
+        Assert.True(controller.Begin(pointer, key));
+        controller.End(pointer, true);
+    }
+    private static void Tap(KeyboardController controller, string id) => Tap(controller, Find(id));
+
+    public static IEnumerable<object[]> Letters()
+    {
+        const string keys = "qwertyuiopasdfghjklzxcvbnm";
+        ushort[] scans = [0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,
+            0x1E,0x1F,0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x2C,0x2D,0x2E,0x2F,0x30,0x31,0x32];
+        return keys.Select((c,i) => new object[] { c.ToString(), (int)scans[i] });
+    }
+    [Theory, MemberData(nameof(Letters))]
+    public void QwertyMappingAndLetterEvents(string id, int scan)
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        var key = Find(id);
+        Assert.True(key.Letter);
+        Assert.Equal(id.ToUpperInvariant(), key.ShiftedLabel);
+        Tap(controller, key);
+        var call = Assert.Single(backend.Calls);
+        Assert.Equal(InputKey.ScanCode((ushort)scan), call.Key);
+        Assert.Empty(call.Modifiers);
+    }
+
+    [Theory]
+    [InlineData("1","!",0x02)] [InlineData("2","\"",0x03)] [InlineData("3","£",0x04)]
+    [InlineData("4","$",0x05)] [InlineData("5","%",0x06)] [InlineData("6","^",0x07)]
+    [InlineData("7","&",0x08)] [InlineData("8","*",0x09)] [InlineData("9","(",0x0A)] [InlineData("0",")",0x0B)]
+    [InlineData("`","¬",0x29)] [InlineData("-","_",0x0C)] [InlineData("=","+",0x0D)]
+    [InlineData("[","{",0x1A)] [InlineData("]","}",0x1B)] [InlineData(";",":",0x27)]
+    [InlineData("'","@",0x28)] [InlineData("#","~",0x2B)] [InlineData("\\","|",0x56)]
+    [InlineData(",","<",0x33)] [InlineData(".",">",0x34)] [InlineData("/","?",0x35)]
+    public void UkPunctuationMapsBothShiftStates(string label, string shifted, int scan)
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        var key = Find(label);
+        Assert.Equal(shifted, key.ShiftedLabel);
+        Tap(controller, key);
+        Tap(controller, "Shift");
+        Assert.Equal(shifted, controller.Label(key));
+        Tap(controller, key);
+        Assert.All(backend.Calls, c => Assert.Equal(InputKey.ScanCode((ushort)scan), c.Key));
+        Assert.Empty(backend.Calls[0].Modifiers);
+        Assert.Equal(new[] { KeyboardLayout.ShiftKey }, backend.Calls[1].Modifiers);
+        Assert.False(controller.Shift);
+    }
+
+    [Theory]
+    [InlineData("backspace",0x0E,false)] [InlineData("delete",0x53,true)]
+    [InlineData("enter",0x1C,false)] [InlineData("tab",0x0F,false)]
+    [InlineData("escape",0x01,false)] [InlineData("space",0x39,false)]
+    [InlineData("left",0x4B,true)] [InlineData("right",0x4D,true)]
+    [InlineData("up",0x48,true)] [InlineData("down",0x50,true)]
+    public void SpecialKeysArePhysicalEvents(string id, int scan, bool extended)
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, id);
+        Assert.Equal(InputKey.ScanCode((ushort)scan, extended), Assert.Single(backend.Calls).Key);
+    }
+
+    [Fact]
+    public void ShiftIsOneShotAndCanToggleOff()
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, "Shift");
+        Assert.True(controller.Active(Find("Shift")));
+        Assert.Empty(backend.Calls);
+        Tap(controller, "Shift");
+        Assert.False(controller.Shift);
+        Tap(controller, "Shift");
+        Tap(controller, "a");
+        Tap(controller, "a");
+        Assert.Equal(new[] { KeyboardLayout.ShiftKey }, backend.Calls[0].Modifiers);
+        Assert.Empty(backend.Calls[1].Modifiers);
+    }
+    [Fact]
+    public void CapsPersistsAndXorsShiftOnlyForLetters()
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, KeyboardLayout.Caps);
+        Assert.True(controller.Caps);
+        Assert.Equal("A", controller.Label(Find("a")));
+        Tap(controller, "a");
+        Tap(controller, "Shift");
+        Assert.Equal("a", controller.Label(Find("a")));
+        Tap(controller, "a");
+        Tap(controller, "2");
+        Assert.Equal(new[] { KeyboardLayout.ShiftKey }, backend.Calls[0].Modifiers);
+        Assert.Empty(backend.Calls[1].Modifiers);
+        Assert.Empty(backend.Calls[2].Modifiers);
+        Assert.True(controller.Caps);
+        Tap(controller, KeyboardLayout.Caps);
+        Assert.False(controller.Caps);
+        Assert.Equal("a", controller.Label(Find("a")));
+    }
+    [Theory]
+    [InlineData("a")] [InlineData("c")] [InlineData("v")]
+    public void CtrlShortcutsIgnoreCapsAndReleaseLatch(string letter)
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, KeyboardLayout.Caps);
+        Tap(controller, "Ctrl");
+        Assert.Equal(letter, controller.Label(Find(letter)));
+        Tap(controller, letter);
+        Assert.Equal(new[] { KeyboardLayout.CtrlKey }, Assert.Single(backend.Calls).Modifiers);
+        Assert.False(controller.Ctrl);
+    }
+    [Fact]
+    public void LayoutSwitchPreservesLatchesForAltTabAndShiftSelection()
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, "Alt");
+        Tap(controller, "layout");
+        Assert.True(controller.Symbols);
+        Assert.True(controller.Alt);
+        Tap(controller, "tab");
+        Assert.Equal(new[] { KeyboardLayout.AltKey }, backend.Calls[0].Modifiers);
+        Assert.False(controller.Alt);
+        Tap(controller, "Shift");
+        Tap(controller, "left");
+        Assert.Equal(new[] { KeyboardLayout.ShiftKey }, backend.Calls[1].Modifiers);
+        Assert.False(controller.Shift);
+        Tap(controller, "layout");
+        Assert.False(controller.Symbols);
+    }
+    [Fact]
+    public void CombinedModifiersAndToggleOff()
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, "Ctrl"); Tap(controller, "Ctrl");
+        Tap(controller, "Alt"); Tap(controller, "Alt");
+        Assert.False(controller.Ctrl); Assert.False(controller.Alt);
+        Tap(controller, "Ctrl"); Tap(controller, "Alt"); Tap(controller, "Shift"); Tap(controller, "tab");
+        Assert.Equal(new[] { KeyboardLayout.CtrlKey, KeyboardLayout.AltKey, KeyboardLayout.ShiftKey }, Assert.Single(backend.Calls).Modifiers);
+        Assert.False(controller.Ctrl || controller.Alt || controller.Shift);
+    }
+
+    [Theory]
+    [InlineData("backspace")] [InlineData("delete")] [InlineData("left")]
+    [InlineData("right")] [InlineData("up")] [InlineData("down")]
+    public void RepeatStartsAfterDelayAndEndsWithoutReleasePress(string id)
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler);
+        Tap(controller, "Shift");
+        Assert.True(controller.Begin(5, Find(id)));
+        Assert.Single(backend.Calls);
+        Assert.False(controller.Shift);
+        Assert.Equal(TimeSpan.FromMilliseconds(450), scheduler.Ticks[0].Delay);
+        scheduler.Ticks[0].Fire();
+        Assert.Equal(2, backend.Calls.Count);
+        scheduler.Ticks[0].Fire(); // An obsolete tick must not emit again within the same session.
+        Assert.Equal(2, backend.Calls.Count);
+        Assert.Equal(TimeSpan.FromMilliseconds(60), scheduler.Ticks[1].Delay);
+        scheduler.Ticks[1].Fire();
+        controller.End(5, true);
+        Assert.All(scheduler.Ticks, t => Assert.True(t.Disposed));
+        scheduler.Ticks[^1].Fire();
+        Assert.Equal(3, backend.Calls.Count);
+        Assert.All(backend.Calls, c => Assert.Equal(new[] { KeyboardLayout.ShiftKey }, c.Modifiers));
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void CancellationOrClosureInvalidatesStaleRepeats(bool close)
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler);
+        controller.Begin(1, Find("backspace"));
+        if (close) controller.Dispose(); else controller.Cancel(1);
+        scheduler.Ticks[0].Fire();
+        controller.End(1, true);
+        Assert.Single(backend.Calls);
+        Assert.Equal(0, controller.InteractionCount);
+        Assert.True(backend.Cleanups > 0);
+        if (close) Assert.False(controller.Begin(2, Find("a")));
+    }
+    [Fact]
+    public void LayoutSwitchCancelsHeldKeysAndRepeats()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler);
+        controller.Begin(1, Find("backspace"));
+        controller.Begin(2, Find("a"));
+        Tap(controller, Find("layout"), 3);
+        scheduler.Ticks[0].Fire(); controller.End(2, true);
+        Assert.Single(backend.Calls);
+        Assert.Equal(0, controller.InteractionCount);
+    }
+    [Fact]
+    public void SequentialAndConcurrentTouchesCommitExactlyOnce()
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Assert.True(controller.Begin(1, Find("a")));
+        Assert.False(controller.Begin(1, Find("b")));
+        Assert.False(controller.Begin(2, Find("a")));
+        Assert.True(controller.Begin(2, Find("b")));
+        controller.End(2, true); controller.End(1, true); controller.End(1, true);
+        for (int i = 0; i < 20; i++) Tap(controller, "c");
+        Assert.Equal(22, backend.Calls.Count);
+        Assert.Equal(Find("b").Mapping, backend.Calls[0].Key);
+        Assert.Equal(Find("a").Mapping, backend.Calls[1].Key);
+    }
+    [Fact]
+    public void LeavingOrCaptureLossCancelsOrdinaryKeyAndLatches()
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, "Ctrl");
+        controller.Begin(1, Find("a")); controller.End(1, false); controller.End(1, true);
+        Assert.Empty(backend.Calls); Assert.False(controller.Ctrl);
+        controller.Begin(1, Find("b")); controller.Cancel(1); controller.End(1, true);
+        Assert.Empty(backend.Calls);
+        Tap(controller, "a"); Assert.Single(backend.Calls);
+    }
+    [Fact]
+    public void InputFailureStopsEveryInteractionAndReportsOriginalError()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler);
+        InputResult? result = null; int failures = 0;
+        controller.Result += r => result = r; controller.InputFailed += () => failures++;
+        controller.Begin(1, Find("backspace")); controller.Begin(2, Find("a"));
+        Tap(controller, Find("Alt"), 3);
+        backend.Fail = true; scheduler.Ticks[0].Fire();
+        controller.End(2, true); scheduler.Ticks[0].Fire();
+        Assert.Equal(2, backend.Calls.Count); Assert.Equal(1, failures);
+        Assert.Equal("test failure", result?.Error);
+        Assert.Equal(0, controller.InteractionCount); Assert.False(controller.Alt);
+        Assert.True(backend.Cleanups > 0);
+    }
+    [Fact]
+    public void PointerAdmissionSuppressesPromotedMouseAndDuplicates()
+    {
+        var pointer = new PointerSession();
+        Assert.True(pointer.Begin(10));
+        Assert.False(pointer.Begin(-1, true)); Assert.False(pointer.Owns(-1, true));
+        Assert.False(pointer.Begin(10)); Assert.False(pointer.Begin(11));
+        Assert.True(pointer.Owns(10)); Assert.False(pointer.Owns(11));
+        Assert.Equal(10L, pointer.Clear()); Assert.Null(pointer.Clear());
+        Assert.False(pointer.Begin(-1, true)); Assert.True(pointer.Begin(-1));
+        Assert.True(pointer.Owns(-1)); Assert.False(pointer.Owns(-1, true));
+    }
+    [Fact]
+    public void RepeatSettingsAreInternalAndValidated()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler, new(TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(80)));
+        controller.Begin(1, Find("left")); scheduler.Ticks[0].Fire();
+        Assert.Equal(TimeSpan.FromMilliseconds(300), scheduler.Ticks[0].Delay);
+        Assert.Equal(TimeSpan.FromMilliseconds(80), scheduler.Ticks[1].Delay);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new KeyboardController(backend, scheduler, new(TimeSpan.Zero, TimeSpan.Zero)));
+    }
+
+    [Fact]
+    public void CleanupFailureStopsOtherSessionsWithoutDependingOnTheWindow()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler);
+        controller.Begin(1, Find("backspace")); controller.Begin(2, Find("left"));
+        backend.CleanupFail = true;
+        InputResult? reported = null;
+        controller.Result += r => reported = r;
+        controller.Cancel(1);
+        Assert.Equal(0, controller.InteractionCount);
+        Assert.True(reported?.CleanupFailed);
+        scheduler.Ticks[1].Fire();
+        Assert.Equal(2, backend.Calls.Count);
+    }
+
+    [Fact]
+    public void ConcurrentRepeatsStopIndependentlyAndSnapshotsDoNotChange()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler);
+        Tap(controller, "Shift"); controller.Begin(1, Find("left"));
+        controller.Begin(2, Find("backspace"));
+        Tap(controller, Find("Ctrl"), 3);
+        scheduler.Ticks[0].Fire();
+        Assert.Equal(new[] { KeyboardLayout.ShiftKey }, backend.Calls[2].Modifiers);
+        controller.End(1, true);
+        scheduler.Ticks[1].Fire();
+        Assert.Empty(backend.Calls[3].Modifiers);
+        Assert.True(controller.Ctrl);
+        controller.End(2, true);
+        Assert.Equal(0, controller.InteractionCount);
+    }
+
+    [Fact]
+    public void OldPointerCallbackCannotAffectANewSessionAndCloseClearsLatches()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler);
+        controller.Begin(1, Find("backspace")); controller.End(1, true);
+        controller.Begin(1, Find("left")); scheduler.Ticks[0].Fire();
+        Assert.Equal(2, backend.Calls.Count);
+        Tap(controller, Find("Shift"), 2); Tap(controller, Find("Ctrl"), 2); Tap(controller, Find("Alt"), 2);
+        controller.Dispose(); scheduler.Ticks[1].Fire();
+        Assert.False(controller.Shift || controller.Ctrl || controller.Alt);
+        Assert.Equal(2, backend.Calls.Count);
+    }
+}

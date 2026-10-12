@@ -1,0 +1,11 @@
+<UserControl x:Class="FloatKeys.Controls.KeyboardKey"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False" IsTabStop="False" IsManipulationEnabled="False">
+    <Border x:Name="Surface" Background="#343B48" BorderBrush="#596273"
+            BorderThickness="1" CornerRadius="8" Padding="8">
+        <TextBlock Text="{Binding Label, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                   Foreground="#F5F7FA" FontSize="18" FontWeight="SemiBold"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Border>
+</UserControl>
