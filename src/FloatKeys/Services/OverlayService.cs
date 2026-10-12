@@ -25,7 +25,6 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
     private bool disposed, displayQueued, orderQueued, started;
     private bool interruptDisplayGestures;
 
-    internal event Action? ExitRequested;
     public bool KeyboardVisible => visibility.Visible;
     public bool LauncherVisible => launcher.IsVisible;
     public void ShowKeyboard() { if (!disposed) visibility.Show(); }
@@ -62,7 +61,6 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
             Save();
         }, () => { keyboard.CancelGeometry(); keyboard.CancelInteractions(); }, keyboard.Hide);
         keyboard.CollapseRequested += visibility.Hide;
-        keyboard.ExitRequested += OnExitRequested;
         keyboard.LayoutChanged += Save;
         keyboard.SizeStep += step => ChangePreferences(step * 8, 0);
         keyboard.OpacityStep += step => ChangePreferences(0, step * .05);
@@ -73,7 +71,6 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
         BindGesture(keyboard.ResizeHandle, keyboard, true);
     }
 
-    private void OnExitRequested() => ExitRequested?.Invoke();
     private void LauncherClosing(object? sender, CancelEventArgs e)
     {
         if (disposed) return;
@@ -288,7 +285,6 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
         hooks.Clear();
         launcher.Closing -= LauncherClosing;
         keyboard.DismissRequested -= HideKeyboard;
-        keyboard.ExitRequested -= OnExitRequested;
         keyboard.LayoutChanged -= Save;
         keyboard.AllowClose = true;
         ShutdownCoordinator.Try("keyboard close", keyboard.Close, log.Write);

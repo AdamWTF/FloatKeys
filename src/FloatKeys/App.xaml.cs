@@ -31,14 +31,12 @@ public partial class App : Application
             {
                 DispatcherUnhandledException -= Unhandled;
                 SessionEnding -= Ending;
-                if (overlay is not null) overlay.ExitRequested -= RequestExit;
             });
             lifetime.Add("instance release", () => { instance?.Dispose(); instance = null; });
             DispatcherUnhandledException += Unhandled;
             SessionEnding += Ending;
             input = new SendInputBackend(new NativeInputTransport(), log.Write);
             overlay = new OverlayService(input, log);
-            overlay.ExitRequested += RequestExit;
             overlay.Show();
             var startup = new StartupService(new RegistryStartupStore(), Environment.ProcessPath, log.Write);
             var controller = new TrayController(overlay, startup, () => lifetime.Stopping, RequestExit,

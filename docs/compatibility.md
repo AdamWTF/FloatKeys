@@ -26,7 +26,7 @@ it does not sign out Windows or send messages to other applications. The isolate
 probe's input backend cannot inject input, and its startup adapter cannot modify the
 registry. Startup tests use fake storage. Actual reboot startup registration and tray
 interaction with touch remain manual checks. Automated exit uses session notifications;
-tray/header Exit routing is tested separately through the shared command/controller path.
+Tray Exit routing and keyboard minimise cleanup are tested separately through the command/controller paths.
 
 Verification fixed session-query cleanup ordering, addressed session messages to WPF's
 hidden application HWND, and qualified icon resources with their owning assembly.
@@ -79,8 +79,10 @@ Start with physical modifiers released and UK English selected locally/remotely.
     one usable tray icon returns, including when both overlays were hidden.
 14. Latch modifiers and start a repeat, then use **Exit FloatKeys** in the tray.
     Confirm both windows disappear and Task Manager shows no FloatKeys process.
-    Repeat with the keyboard header Exit. Normal physical typing must work afterward,
-    with no continuing repeat or logically held simulated modifiers/keys.
+    Relaunch, latch modifiers and start a repeat, then minimise using the keyboard minus
+    button. Confirm the launcher and tray remain available and can restore the keyboard.
+    Normal physical typing must work afterward, with no continuing repeat or logically
+    held simulated modifiers/keys. Neither keyboard layout should expose an Exit button.
 15. Relaunch and confirm positions, dimensions, opacity, Symbols selection and startup
     configuration persist; launcher is visible and keyboard hidden. Review logs for
     cleanup/settings failures. Repeat final exit with both overlays hidden.
@@ -164,7 +166,7 @@ new installer or release-archive pipeline. Source execution is also available wi
 `dotnet run --project src/FloatKeys/FloatKeys.csproj` on a Windows machine with .NET 10 SDK.
 
 The launcher is always present; tap it to show/hide the keyboard. Header minus collapses,
-gear toggles launcher settings, and Exit shuts down both windows. Saved positions and sizes
+gear toggles launcher settings, and tray Exit shuts down both windows. Saved positions and sizes
 are reused. Focus the target field yourself. Settings live at
 `%LOCALAPPDATA%\FloatKeys\settings.json`; errors go to the existing `prototype.log`.
 
@@ -214,12 +216,13 @@ a stable top-level HWND alone does not prove child-field focus or input consumpt
    Ordinary app switching must not move overlays. Intentional full-screen placement is retained
    while valid. On an unusually small display, verify touch scrolling reaches every key/control.
 10. **Persistence:** move both windows, resize keyboard, change settings and switch to Symbols.
-    Exit and relaunch. Positions, dimensions and preferences return; keyboard starts hidden.
+    Use tray Exit and relaunch. Positions, dimensions and preferences return; keyboard starts hidden.
     With the app stopped, back up settings and test missing/corrupted JSON; defaults recover.
 11. **Stress/exit:** show/hide 50 times while the target is focused. Cancel touches and hide
     during repeat/modifier interactions. There must be no continuing edits, stuck modifiers,
-    duplicate taps or focus loss. Exit through the header and native window closure; both
-    windows and the process disappear without changing target focus.
+    duplicate taps or focus loss. Minimise through the header and close each native window;
+    the process and tray stay available. Restore through the tray, then use tray Exit;
+    both windows and the process disappear without changing target focus.
 
 ## Remaining risks and deviations
 
@@ -329,9 +332,10 @@ launching through Explorer may require refocusing the target before the first ta
    For a repeating key, move outside: already sent actions remain, but repetition stops.
    Interrupt capture with a system gesture where possible. Switch layouts during a hold;
    no old repeats/taps may continue. Test rapid touch taps for duplicate characters.
-8. **Closure:** latch Ctrl/Alt/Shift and press Exit; normal physical typing must work.
+8. **Closure:** latch Ctrl/Alt/Shift and minimise; normal physical typing must work.
    Also close the window via the system/WM_CLOSE while a repeat is active, then verify
-   no continuing edits or stuck modifiers. Check the log if cleanup reports failure.
+   no continuing edits or stuck modifiers. Restore from the tray, then use tray Exit
+   to close the app. Check the log if cleanup reports failure.
 9. **Moonlight:** focus remote Notepad manually and repeat typing, symbols, shortcuts
    and repeat tests. Verify edits on the remote machine. Test windowed and fullscreen
    separately and record overlay visibility, local focus and forwarding. If input fails,

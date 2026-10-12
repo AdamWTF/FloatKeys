@@ -22,7 +22,6 @@ public partial class KeyboardWindow : Window
     internal event Action? CollapseRequested;
     internal event Action? DismissRequested;
     internal bool AllowClose { get; set; }
-    internal event Action? ExitRequested;
     internal event Action? LayoutChanged;
     internal event Action<int>? SizeStep;
     internal event Action<int>? OpacityStep;
@@ -38,7 +37,6 @@ public partial class KeyboardWindow : Window
         controller.Changed += Refresh;
         controller.Result += ShowResult;
         controller.InputFailed += CancelControls;
-        controller.ExitRequested += () => ExitRequested?.Invoke();
         BuildKeys();
         Closing += (_, e) =>
         {
@@ -73,8 +71,9 @@ public partial class KeyboardWindow : Window
             SettingsPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
             KeyRows.IsEnabled = !open;
         }));
-        HeaderKeys.Children.Add(ActionKey("−", () => CollapseRequested?.Invoke()));
-        HeaderKeys.Children.Add(ActionKey("Exit", () => ExitRequested?.Invoke(), 64));
+        var minimise = ActionKey("−", () => CollapseRequested?.Invoke());
+        minimise.ToolTip = "Minimise keyboard";
+        HeaderKeys.Children.Add(minimise);
         var layout = controller.Symbols ? KeyboardLayout.Symbols : KeyboardLayout.Main;
         KeyRows.RowDefinitions.Clear();
         int rowIndex = 0;

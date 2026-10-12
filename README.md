@@ -29,8 +29,9 @@ It starts with a floating keyboard icon near the right edge of the primary displ
 Tap the icon to show/hide the keyboard; drag the icon to move it. Focus Notepad or your
 target application yourself, then tap keys. Drag the keyboard's header grip to move it
 and its bottom-right diagonal handle to resize it. The header minus button collapses it;
-the launcher remains available above the keyboard. The header Exit or tray
-**Exit FloatKeys** closes both windows, releases owned input and terminates the process.
+the launcher remains available above the keyboard and FloatKeys stays running in the tray.
+Only the tray's **Exit FloatKeys** command closes both windows, releases owned input
+and terminates the process.
 
 The gear button opens a small launcher settings panel: use +/− to adjust size
 (48–80 DIPs) and background opacity (65–100%). Tap the gear again to return to typing.

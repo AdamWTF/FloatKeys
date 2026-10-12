@@ -35,7 +35,6 @@ internal sealed class KeyboardController : IDisposable
     internal event Action? Changed;
     internal event Action<InputResult>? Result;
     internal event Action? InputFailed;
-    internal event Action? ExitRequested;
 
     internal KeyboardController(IInputBackend input, IRepeatScheduler scheduler, RepeatTiming? timing = null, bool symbols = false)
     {
@@ -88,7 +87,6 @@ internal sealed class KeyboardController : IDisposable
                 ReportCleanup();
                 Symbols = !Symbols;
                 break;
-            case KeyAction.Exit: ExitRequested?.Invoke(); return;
             case KeyAction.Input: Snapshot(session); Emit(session); break;
         }
         Changed?.Invoke();

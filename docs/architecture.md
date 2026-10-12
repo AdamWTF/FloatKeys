@@ -14,8 +14,10 @@ uses an injectable IStartupStore. These are internal interfaces, not public APIs
 OverlayService still owns one launcher, keyboard and controller for its lifetime.
 Keyboard and launcher visibility are independent. Normal native closure is intercepted
 before controller disposal and hides only that window. Hidden launchers are excluded
-from ordering. Settings opens the existing inline panel. Existing header Exit and tray
-Exit share the application lifetime coordinator. All native non-activation styles,
+from ordering. Settings opens the existing inline panel from the tray or keyboard gear.
+The keyboard minus button minimises through the hide-and-cleanup path; there is no
+keyboard exit action. Only tray Exit requests intentional application shutdown through
+the lifetime coordinator. All native non-activation styles,
 SWP_NOACTIVATE flags, touch routing, geometry and key mappings remain intact.
 
 ShutdownCoordinator runs guarded cleanup stages once. Overlay cleanup cancels gestures,
@@ -70,7 +72,7 @@ PrototypeLog.cs is replaced by AppLog.cs. App.xaml already had explicit shutdown
 so it needs no edit. No layout, pointer-control or input-ABI redesign was performed.
 
 The following Milestone 3/2 sections are historical. Milestone 4 supersedes their
-native-close-to-exit behavior, prototype logging and deferred packaging statements.
+native-close-to-exit behavior, keyboard Exit controls, prototype logging and deferred packaging statements.
 
 # Milestone 3 architecture
 
@@ -79,7 +81,7 @@ native-close-to-exit behavior, prototype logging and deferred packaging statemen
 `OverlayService` owns one launcher and one keyboard for the application's lifetime.
 Both invisible HWNDs receive styles and activation hooks before the first show. Startup
 shows only the launcher; visibility transitions reuse the keyboard/controller. Collapse
-calls Hide, never Close. Exit or native closure shuts down both windows. Explicit WPF
+calls Hide, never Close. Tray Exit shuts down both windows; native closure hides its overlay. Explicit WPF
 shutdown keeps the process running when the keyboard is hidden.
 
 The original NOACTIVATE/TOOLWINDOW/TOPMOST policy and MA_NOACTIVATE/PA_NOACTIVATE
@@ -181,8 +183,8 @@ are unchanged. INPUT remains 40 bytes with its union at offset 8 on ARM64/x64, K
 `KeyboardLayout` defines read-only rows of immutable key records: identity, display label,
 logical action, scan-code mapping, alternate shifted label/mapping, letter/repeat flags,
 style and relative width. It includes UK ISO backslash (0x56), UK hash (0x2B), apostrophe/@
-and 2/double-quote. The symbols page adds Tab, Escape, Delete, Up and Down. Caps and Exit
-are header controls. All input keys use physical scan codes; Unicode is not a fallback.
+and 2/double-quote. The symbols page adds Tab, Escape, Delete, Up and Down. Caps, settings
+and minimise are header controls. All input keys use physical scan codes; Unicode is not a fallback.
 
 `KeyboardController` is independent of WPF. It owns logical latches, local Caps,
 layout selection and pointer-key sessions. Native key ownership remains exclusively in

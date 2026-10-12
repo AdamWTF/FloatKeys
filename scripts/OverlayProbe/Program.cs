@@ -32,9 +32,11 @@ internal static class Program
             var launcher = Field<LauncherWindow>(overlay, "launcher");
             var keyboard = Field<KeyboardWindow>(overlay, "keyboard");
             var visibility = Field<OverlayVisibility>(overlay, "visibility");
-            bool stopping = false;
+            int shutdowns = 0;
+            var lifetime = new ShutdownCoordinator(message => throw new Exception(message));
+            lifetime.Add("probe shutdown", () => shutdowns++);
             var trayController = new TrayController(overlay, new StartupService(new ProbeStartupStore(), null, _ => { }),
-                () => stopping, () => stopping = true, message => throw new Exception(message));
+                () => lifetime.Stopping, lifetime.Stop, message => throw new Exception(message));
             using var tray = new TrayService(trayController, message => throw new Exception(message));
             var notifyIcon = Field<System.Windows.Forms.NotifyIcon>(tray, "icon");
             Check(notifyIcon.Visible, "tray icon available");
@@ -78,6 +80,12 @@ internal static class Program
             Check(!keyboard.IsVisible && launcher.IsVisible, "keyboard native close hides only keyboard");
             launcher.Close(); Pump();
             Check(!keyboard.IsVisible && !launcher.IsVisible, "both native windows can hide without shutdown");
+            Check(notifyIcon.Visible && !lifetime.Stopping, "tray remains available with both overlays hidden");
+            var trayItems = Field<Dictionary<TrayCommand, System.Windows.Forms.ToolStripMenuItem>>(tray, "items");
+            trayItems[TrayCommand.Settings].PerformClick(); Pump();
+            Check(keyboard.IsVisible && !launcher.IsVisible && !((Grid)keyboard.FindName("KeyRows")).IsEnabled,
+                "tray settings restores hidden keyboard and opens panel");
+            overlay.HideKeyboard();
             overlay.ShowKeyboard(); overlay.ShowLauncher(); Pump();
             Check(new WindowInteropHelper(keyboard).Handle == kh && new WindowInteropHelper(launcher).Handle == lh, "close-hide preserves HWNDs");
             Check(NativeMethods.GetForegroundWindow() == foreground, "restore foreground preservation");
@@ -110,17 +118,33 @@ internal static class Program
                 $"settings step buttons persist: size={saved.Launcher.WidthDip:R} opacity={saved.LauncherOpacity:R}");
             Released((KeyboardKey)header.Children[1]);
             Check(((Grid)keyboard.FindName("KeyRows")).IsEnabled, "settings restores keys");
+            Check(header.Children.OfType<KeyboardKey>().All(key => key.Label != "Exit"), "keyboard has no Exit control");
+            Check(Equals(((KeyboardKey)header.Children[2]).ToolTip, "Minimise keyboard"), "minimise tooltip");
+            var keyboardController = Field<KeyboardController>(keyboard, "controller");
+            keyboardController.Begin(10, KeyboardLayout.Main[2][0]); keyboardController.End(10, true);
+            keyboardController.Begin(11, KeyboardLayout.Main[3][1]); keyboardController.End(11, true);
+            keyboardController.Begin(12, KeyboardLayout.Main[3][2]); keyboardController.End(12, true);
+            backend.AllowChords = true; // Records calls only; never sends native input.
+            var repeatKey = KeyboardLayout.Main.SelectMany(row => row).First(key => key.Repeat);
+            Check(keyboardController.Begin(13, repeatKey), "active repeat before minimise");
+            Check(keyboardController.Begin(14, KeyboardLayout.Main[0][0]), "pending touch before minimise");
+            keyboardController.Begin(15, KeyboardLayout.Main[3][1]); keyboardController.End(15, true);
+            int cleanupsBeforeMinimise = backend.Cleanups, pressesBeforeMinimise = backend.Presses;
             Released((KeyboardKey)header.Children[2]);
-            Check(!keyboard.IsVisible && launcher.IsVisible, "header collapse leaves launcher");
-            visibility.Hide();
-            bool exitRequested = false;
-            overlay.ExitRequested += () => exitRequested = true;
-            visibility.Show(); Pump();
-            Released((KeyboardKey)header.Children[3]);
-            Check(exitRequested, "header Exit routes to application lifetime");
-            var trayItems = Field<Dictionary<TrayCommand, System.Windows.Forms.ToolStripMenuItem>>(tray, "items");
+            Pump();
+            Check(!keyboard.IsVisible && launcher.IsVisible && notifyIcon.Visible && !lifetime.Stopping,
+                "header minimise leaves launcher and tray without shutdown");
+            Check(keyboardController.InteractionCount == 0 && !keyboardController.Shift && !keyboardController.Ctrl && !keyboardController.Alt,
+                "minimise clears pending touches, repeat and modifier latches");
+            keyboardController.End(14, true); Pump();
+            Check(backend.Cleanups > cleanupsBeforeMinimise && backend.Presses == pressesBeforeMinimise,
+                "minimise releases input and cancelled touch cannot type");
+            backend.AllowChords = false;
+            Gesture(launcher.Handle, new(0, 0), new(0, 0)); Pump();
+            Check(keyboard.IsVisible && new WindowInteropHelper(keyboard).Handle == kh, "launcher restores minimised keyboard");
             trayItems[TrayCommand.Exit].PerformClick();
-            Check(stopping, "tray Exit routes to application lifetime");
+            trayItems[TrayCommand.Exit].PerformClick();
+            Check(lifetime.Stopping && shutdowns == 1, "tray Exit routes to application lifetime once");
             Console.WriteLine($"PASS lifecycle architecture={RuntimeInformation.ProcessArchitecture} cycles=50 closeHides=true sameHWND=true foregroundPreserved=true cleanups={backend.Cleanups}");
         }
         Pump();
@@ -132,6 +156,8 @@ internal static class Program
         foreach (var size in new[] { new Size(840, 360), new Size(720, 360), new Size(1000, 480) })
         {
             var window = new KeyboardWindow(backend, new AppLog(), symbols);
+            Check(((StackPanel)window.FindName("HeaderKeys")).Children.OfType<KeyboardKey>().All(key => key.Label != "Exit"),
+                "neither keyboard layout exposes Exit");
             var root = (FrameworkElement)window.Content;
             root.Measure(size); root.Arrange(new Rect(size)); root.UpdateLayout();
             var keys = Descendants(root).OfType<KeyboardKey>().ToArray();
@@ -206,7 +232,14 @@ internal static class Program
     private sealed class NoInput : IInputBackend
     {
         internal int Cleanups;
-        public InputResult KeyPressChord(InputKey key, IReadOnlyList<InputKey> modifiers) => throw new Exception("Probe must never inject input.");
+        internal int Presses;
+        internal bool AllowChords;
+        public InputResult KeyPressChord(InputKey key, IReadOnlyList<InputKey> modifiers)
+        {
+            if (!AllowChords) throw new Exception("Unexpected probe input call.");
+            Presses++;
+            return new(0, 0, 0, false, null);
+        }
         public InputResult KeyDown(InputKey key) => throw new Exception();
         public InputResult KeyUp(InputKey key) => throw new Exception();
         public InputResult KeyPress(InputKey key) => throw new Exception();

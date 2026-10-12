@@ -1,6 +1,6 @@
 namespace FloatKeys.Input;
 
-internal enum KeyAction { Input, Shift, Ctrl, Alt, Caps, SwitchLayout, Exit }
+internal enum KeyAction { Input, Shift, Ctrl, Alt, Caps, SwitchLayout }
 internal enum KeyStyle { Character, Special, Modifier, Enter }
 internal sealed record KeyDefinition(string Id, string Label, KeyAction Action,
     InputKey? Mapping = null, string? ShiftedLabel = null, InputKey? ShiftedMapping = null,
@@ -12,7 +12,6 @@ internal static class KeyboardLayout
     internal static readonly InputKey CtrlKey = InputKey.ScanCode(0x1D);
     internal static readonly InputKey AltKey = InputKey.ScanCode(0x38);
     internal static readonly KeyDefinition Caps = new("caps", "Caps Lock", KeyAction.Caps, Style: KeyStyle.Modifier);
-    internal static readonly KeyDefinition Exit = new("exit", "Exit", KeyAction.Exit, Style: KeyStyle.Special);
     private static KeyDefinition Modifier(string id, KeyAction action, double width = 1) =>
         new(id, id, action, Style: KeyStyle.Modifier, Width: width);
     private static KeyDefinition Special(string id, string label, ushort scan, bool extended = false, bool repeat = false, double width = 1) =>
