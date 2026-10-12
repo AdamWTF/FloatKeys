@@ -89,7 +89,7 @@ public sealed class PolishedOverlayTests
     public void ResizeEnforcesMinimumTouchDimensions(double scale)
     {
         var result = OverlayGeometry.Resize(new(0, 0, 840 * scale, 400 * scale), -1000, -1000, scale, new(0, 0, 4000, 3000));
-        Assert.Equal(720 * scale, result.Width); Assert.Equal(360 * scale, result.Height);
+        Assert.Equal(720 * scale, result.Width); Assert.Equal(432 * scale, result.Height);
     }
     [Fact]
     public void ResizeAtDisplayEdgeKeepsTopLeftAnchor()
@@ -104,6 +104,33 @@ public sealed class PolishedOverlayTests
     {
         var result = OverlayGeometry.Resize(new(0, 0, 720, 360), 0, 0, 1, new(0, 0, 600, 300));
         Assert.Equal(new PixelRect(0, 0, 600, 300), result);
+    }
+
+    [Theory]
+    [InlineData(false, false, 432)] [InlineData(true, false, 382)] [InlineData(false, true, 382)]
+    [InlineData(true, true, 382)]
+    public void MinimumHeightTracksVisiblePage(bool compact, bool symbols, double height)
+    {
+        var layout = compact ? PrimaryKeyboardLayout.Compact : PrimaryKeyboardLayout.Chat;
+        foreach (double scale in new[] { 1d, 1.5, 2 })
+        {
+            var rect = OverlayGeometry.Resize(new(100, 50, 840 * scale, 480 * scale), -5000, -5000,
+                scale, new(0, 0, 4000, 3000), layout, symbols);
+            Assert.Equal(720 * scale, rect.Width); Assert.Equal(height * scale, rect.Height);
+            Assert.Equal(100, rect.X); Assert.Equal(50, rect.Y);
+        }
+    }
+
+    [Fact]
+    public void LayoutGrowthPreservesPositionAndDoesNotShrinkExistingSize()
+    {
+        var area = new PixelRect(0, 0, 1920, 2880);
+        var compact = new PixelRect(100, 120, 720, 382);
+        var chat = OverlayGeometry.EnsureKeyboardSize(compact, 1, PrimaryKeyboardLayout.Chat, false, area);
+        Assert.Equal(new PixelRect(100, 120, 720, 432), chat);
+        Assert.Equal(chat, OverlayGeometry.EnsureKeyboardSize(chat, 1, PrimaryKeyboardLayout.Compact, false, area));
+        Assert.Equal(new PixelRect(1200, 2448, 720, 432),
+            OverlayGeometry.EnsureKeyboardSize(new(1400, 2600, 720, 382), 1, PrimaryKeyboardLayout.Chat, false, area));
     }
     [Fact]
     public void SettingsValidationRecoversFieldsIndependently()

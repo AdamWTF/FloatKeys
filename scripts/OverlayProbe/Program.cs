@@ -103,34 +103,53 @@ internal static class Program
             NativeMethods.GetWindowRect(kh, out var minimum);
             double dpi = NativeMethods.GetDpiForWindow(kh) / 96d;
             Check(Math.Abs(minimum.Pixels.Width / dpi - 720) < 1, "native minimum width");
-            Check(Math.Abs(minimum.Pixels.Height / dpi - 360) < 1, "native minimum height");
+            Check(Math.Abs(minimum.Pixels.Height / dpi - KeyboardSizing.MinimumHeight(keyboard.SelectedLayout, keyboard.Symbols)) < 1, "native minimum height");
             Check(NativeMethods.GetForegroundWindow() == foreground, "movement/resize foreground preservation");
             Check(IsAbove(lh, kh), "launcher remains above keyboard");
             var saved = new SettingsService(path).Load();
             Check(Math.Abs(saved.Keyboard.WidthDip - 720) < 1, "geometry saved on gesture completion");
             var header = (StackPanel)keyboard.FindName("HeaderKeys");
-            Released((KeyboardKey)header.Children[1]);
+            Released(HeaderKey(header, "⚙"));
             Check(!((Grid)keyboard.FindName("KeyRows")).IsEnabled, "settings disables covered keys");
             Released((KeyboardKey)((StackPanel)keyboard.FindName("SizeSettings")).Children[2]);
             Released((KeyboardKey)((StackPanel)keyboard.FindName("OpacitySettings")).Children[2]);
             saved = new SettingsService(path).Load();
             Check(Math.Abs(saved.Launcher.WidthDip - 64) < 1 && Math.Abs(saved.LauncherOpacity - .9) < .000001,
                 $"settings step buttons persist: size={saved.Launcher.WidthDip:R} opacity={saved.LauncherOpacity:R}");
-            Released((KeyboardKey)header.Children[1]);
+            Released(HeaderKey(header, "⚙"));
             Check(((Grid)keyboard.FindName("KeyRows")).IsEnabled, "settings restores keys");
             Check(header.Children.OfType<KeyboardKey>().All(key => key.Label != "Exit"), "keyboard has no Exit control");
-            Check(Equals(((KeyboardKey)header.Children[2]).ToolTip, "Minimise keyboard"), "minimise tooltip");
+            Check(Equals(HeaderKey(header, "−").ToolTip, "Minimise keyboard"), "minimise tooltip");
             var keyboardController = Field<KeyboardController>(keyboard, "controller");
-            keyboardController.Begin(10, KeyboardLayout.Main[2][0]); keyboardController.End(10, true);
-            keyboardController.Begin(11, KeyboardLayout.Main[3][1]); keyboardController.End(11, true);
-            keyboardController.Begin(12, KeyboardLayout.Main[3][2]); keyboardController.End(12, true);
+            Tap(keyboardController, "Shift", 10);
+            Tap(keyboardController, "Ctrl", 11);
+            Tap(keyboardController, "Alt", 12);
+            Tap(keyboardController, "caps", 12);
+            var positionBeforeLayout = minimum.Pixels;
+            int pressesBeforeLayout = backend.Presses;
+            Released(HeaderKey(header, "Chat")); Pump();
+            Check(keyboardController.SelectedLayout == PrimaryKeyboardLayout.Compact, "header selects Compact");
+            Check(keyboardController.Shift && keyboardController.Ctrl && keyboardController.Alt && keyboardController.Caps,
+                "header preserves modifier state");
+            NativeMethods.GetWindowRect(kh, out var compactBounds);
+            Check(compactBounds.Pixels == positionBeforeLayout, "layout switch retains sufficient bounds");
+            Tap(keyboardController, "layout", 12); Pump();
+            Check(keyboardController.Symbols, "symbols opens independently");
+            Released(HeaderKey(header, "Compact")); Pump();
+            Check(keyboardController.Symbols && keyboard.SelectedLayout == PrimaryKeyboardLayout.Chat, "selector preserves open Symbols");
+            Released(HeaderKey(header, "Chat")); Pump();
+            Tap(keyboardController, "layout", 12); Pump();
+            Check(!keyboardController.Symbols && keyboard.SelectedLayout == PrimaryKeyboardLayout.Compact, "ABC restores selected Compact");
+            Check(backend.Presses == pressesBeforeLayout, "layout/page switches inject no input");
+            Check(NativeMethods.GetForegroundWindow() == foreground, "layout/page switches preserve foreground");
+            Check(new SettingsService(path).Load().KeyboardLayout == "compact", "header preference saved");
             backend.AllowChords = true; // Records calls only; never sends native input.
             var repeatKey = KeyboardLayout.Main.SelectMany(row => row).First(key => key.Repeat);
             Check(keyboardController.Begin(13, repeatKey), "active repeat before minimise");
-            Check(keyboardController.Begin(14, KeyboardLayout.Main[0][0]), "pending touch before minimise");
-            keyboardController.Begin(15, KeyboardLayout.Main[3][1]); keyboardController.End(15, true);
+            Check(keyboardController.Begin(14, FindKey("a")), "pending touch before minimise");
+            Tap(keyboardController, "Ctrl", 15);
             int cleanupsBeforeMinimise = backend.Cleanups, pressesBeforeMinimise = backend.Presses;
-            Released((KeyboardKey)header.Children[2]);
+            Released(HeaderKey(header, "−"));
             Pump();
             Check(!keyboard.IsVisible && launcher.IsVisible && notifyIcon.Visible && !lifetime.Stopping,
                 "header minimise leaves launcher and tray without shutdown");
@@ -150,32 +169,44 @@ internal static class Program
         Pump();
         Check(NativeMethods.GetForegroundWindow() == foreground, "shutdown foreground preservation");
         Check(new SettingsService(path).Load().StartWithWindows, "shutdown preserves startup preference in final settings snapshot");
+        using (var restored = new OverlayService(backend, new AppLog(), new SettingsService(path)))
+        {
+            var window = Field<KeyboardWindow>(restored, "keyboard");
+            Check(window.SelectedLayout == PrimaryKeyboardLayout.Compact && !window.Symbols, "startup restores selected primary page");
+        }
         File.Delete(path);
 
+        foreach (var layout in new[] { PrimaryKeyboardLayout.Chat, PrimaryKeyboardLayout.Compact })
         foreach (bool symbols in new[] { false, true })
-        foreach (var size in new[] { new Size(840, 360), new Size(720, 360), new Size(1000, 480) })
+        foreach (var size in new[] { new Size(840, KeyboardSizing.DefaultHeight(layout)),
+            new Size(720, KeyboardSizing.MinimumHeight(layout, symbols)), new Size(1000, 600), new Size(760, 700) })
         {
-            var window = new KeyboardWindow(backend, new AppLog(), symbols);
+            var window = new KeyboardWindow(backend, new AppLog(), symbols, layout);
             Check(((StackPanel)window.FindName("HeaderKeys")).Children.OfType<KeyboardKey>().All(key => key.Label != "Exit"),
                 "neither keyboard layout exposes Exit");
             var root = (FrameworkElement)window.Content;
             root.Measure(size); root.Arrange(new Rect(size)); root.UpdateLayout();
             var keys = Descendants(root).OfType<KeyboardKey>().ToArray();
+            Check(Descendants(root).OfType<ScrollViewer>().All(s => s.ScrollableWidth == 0 && s.ScrollableHeight == 0), "usable sizes need no scrolling");
             foreach (var key in keys)
             {
                 var bounds = key.TransformToAncestor(root).TransformBounds(new Rect(0, 0, key.ActualWidth, key.ActualHeight));
                 Check(key.ActualWidth >= 44 && key.ActualHeight >= 44 && bounds.Right <= size.Width && bounds.Bottom <= size.Height, $"key bounds {key.Label}: {bounds}");
+                var label = Descendants(key).OfType<TextBlock>().Single();
+                var text = new FormattedText(key.Label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                    new Typeface(label.FontFamily, label.FontStyle, label.FontWeight, label.FontStretch), label.FontSize, Brushes.White, 1);
+                Check(text.Width <= key.ActualWidth - 10 && text.Height <= key.ActualHeight - 10, $"unclipped label {key.Label}");
             }
-            foreach (int dpi in new[] { 96, 144, 192 }) Render(root, size, dpi, Path.Combine(directory, $"{(symbols ? "symbols" : "qwerty")}-{size.Width}-{dpi}.png"));
-            Console.WriteLine($"PASS render layout={(symbols ? "symbols" : "qwerty")} size={size} minKey={keys.Min(k => k.ActualWidth):F1}x{keys.Min(k => k.ActualHeight):F1} dpi=96,144,192");
+            foreach (int renderDpi in new[] { 96, 144, 192 }) Render(root, size, renderDpi, Path.Combine(directory, $"{layout}-{(symbols ? "symbols" : "primary")}-{size.Width}-{size.Height}-{renderDpi}.png"));
+            Console.WriteLine($"PASS render layout={layout} symbols={symbols} size={size} minKey={keys.Min(k => k.ActualWidth):F1}x{keys.Min(k => k.ActualHeight):F1} dpi=96,144,192");
             window.Close();
         }
         var settingsWindow = new KeyboardWindow(backend, new AppLog());
         var panel = (UIElement)settingsWindow.FindName("SettingsPanel");
         panel.Visibility = Visibility.Visible;
         var settingsRoot = (FrameworkElement)settingsWindow.Content;
-        settingsRoot.Measure(new(720, 360)); settingsRoot.Arrange(new Rect(0, 0, 720, 360)); settingsRoot.UpdateLayout();
-        Render(settingsRoot, new(720, 360), 192, Path.Combine(directory, "settings.png"));
+        settingsRoot.Measure(new(720, 432)); settingsRoot.Arrange(new Rect(0, 0, 720, 432)); settingsRoot.UpdateLayout();
+        Render(settingsRoot, new(720, 432), 192, Path.Combine(directory, "settings.png"));
         settingsWindow.Close();
         var small = new KeyboardWindow(backend, new AppLog());
         var smallRoot = (FrameworkElement)small.Content;
@@ -198,6 +229,14 @@ internal static class Program
         Field<Action<bool, bool>>(handle, "Completed")(true, false);
     }
     private static void Released(KeyboardKey key) => Field<Action<long, bool>>(key, "Released")(1, true);
+    private static KeyboardKey HeaderKey(StackPanel header, string label) => header.Children.OfType<KeyboardKey>().Single(k => k.Label == label);
+    private static KeyDefinition FindKey(string id) => id == "caps" ? KeyboardLayout.Caps :
+        KeyboardLayout.Chat.Concat(KeyboardLayout.Symbols).SelectMany(r => r).First(k => k.Id == id);
+    private static void Tap(KeyboardController controller, string id, long pointer)
+    {
+        Check(controller.Begin(pointer, FindKey(id)), $"admit {id}");
+        controller.End(pointer, true);
+    }
     private static T Field<T>(object obj, string name) => (T)obj.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(obj)!;
     private static void Check(bool success, string message) { if (!success) throw new Exception(message); }
     private static bool IsAbove(nint launcher, nint keyboard)

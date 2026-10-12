@@ -1,4 +1,5 @@
 using FloatKeys.Models;
+using FloatKeys.Input;
 
 namespace FloatKeys.Platform;
 
@@ -40,9 +41,16 @@ internal static class OverlayGeometry
         double w = Math.Min(rect.Width, area.Width), h = Math.Min(rect.Height, area.Height);
         return new(Math.Clamp(rect.X, area.X, area.Right - w), Math.Clamp(rect.Y, area.Y, area.Bottom - h), w, h);
     }
-    internal static PixelRect Resize(PixelRect start, double dx, double dy, double scale, PixelRect area) => Fit(start with
+    internal static PixelRect EnsureKeyboardSize(PixelRect rect, double scale, PrimaryKeyboardLayout layout, bool symbols, PixelRect area) => Fit(rect with
     {
-        Width = Math.Max(720 * scale, Math.Min(start.Width + dx, area.Right - start.X)),
-        Height = Math.Max(360 * scale, Math.Min(start.Height + dy, area.Bottom - start.Y))
+        Width = Math.Max(rect.Width, KeyboardSizing.MinimumWidth * scale),
+        Height = Math.Max(rect.Height, KeyboardSizing.MinimumHeight(layout, symbols) * scale)
+    }, area);
+
+    internal static PixelRect Resize(PixelRect start, double dx, double dy, double scale, PixelRect area,
+        PrimaryKeyboardLayout layout = PrimaryKeyboardLayout.Chat, bool symbols = false) => Fit(start with
+    {
+        Width = Math.Max(KeyboardSizing.MinimumWidth * scale, Math.Min(start.Width + dx, area.Right - start.X)),
+        Height = Math.Max(KeyboardSizing.MinimumHeight(layout, symbols) * scale, Math.Min(start.Height + dy, area.Bottom - start.Y))
     }, area);
 }

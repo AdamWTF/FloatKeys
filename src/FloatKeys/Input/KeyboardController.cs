@@ -31,16 +31,19 @@ internal sealed class KeyboardController : IDisposable
     internal bool Alt { get; private set; }
     internal bool Caps { get; private set; }
     internal bool Symbols { get; private set; }
+    internal PrimaryKeyboardLayout SelectedLayout { get; private set; }
     internal int InteractionCount => sessions.Count;
     internal event Action? Changed;
     internal event Action<InputResult>? Result;
     internal event Action? InputFailed;
 
-    internal KeyboardController(IInputBackend input, IRepeatScheduler scheduler, RepeatTiming? timing = null, bool symbols = false)
+    internal KeyboardController(IInputBackend input, IRepeatScheduler scheduler, RepeatTiming? timing = null, bool symbols = false,
+        PrimaryKeyboardLayout layout = PrimaryKeyboardLayout.Chat)
     {
         this.input = input;
         this.scheduler = scheduler;
         Symbols = symbols;
+        SelectedLayout = layout;
         this.timing = timing ?? RepeatTiming.Default;
         if (this.timing.Delay <= TimeSpan.Zero || this.timing.Interval <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(timing));
@@ -48,6 +51,7 @@ internal sealed class KeyboardController : IDisposable
 
     internal string Label(KeyDefinition key)
     {
+        if (key.FixedCharacter) return key.Label;
         bool shifted = key.Letter && !Ctrl && !Alt ? Caps ^ Shift : Shift;
         return shifted && key.ShiftedLabel is not null ? key.ShiftedLabel : key.Label;
     }
@@ -56,6 +60,15 @@ internal sealed class KeyboardController : IDisposable
         KeyAction.Shift => Shift, KeyAction.Ctrl => Ctrl, KeyAction.Alt => Alt,
         KeyAction.Caps => Caps, _ => false
     };
+
+    internal void SelectLayout(PrimaryKeyboardLayout layout)
+    {
+        if (closed || SelectedLayout == layout) return;
+        StopSessions();
+        ReportCleanup();
+        SelectedLayout = layout;
+        Changed?.Invoke();
+    }
 
     internal bool Begin(long pointer, KeyDefinition key)
     {
@@ -94,7 +107,8 @@ internal sealed class KeyboardController : IDisposable
 
     private void Snapshot(Session session)
     {
-        bool shift = session.Key.Letter && !Ctrl && !Alt ? Caps ^ Shift : Shift;
+        bool shift = session.Key.FixedCharacter ? session.Key.RequiredShift :
+            session.Key.Letter && !Ctrl && !Alt ? Caps ^ Shift : Shift;
         session.Mapping = (shift ? session.Key.ShiftedMapping : null) ?? session.Key.Mapping
             ?? throw new InvalidOperationException("Input key has no mapping.");
         var modifiers = new List<InputKey>(3);

@@ -124,11 +124,7 @@ public sealed class KeyboardTests
     [InlineData("1","!",0x02)] [InlineData("2","\"",0x03)] [InlineData("3","£",0x04)]
     [InlineData("4","$",0x05)] [InlineData("5","%",0x06)] [InlineData("6","^",0x07)]
     [InlineData("7","&",0x08)] [InlineData("8","*",0x09)] [InlineData("9","(",0x0A)] [InlineData("0",")",0x0B)]
-    [InlineData("`","¬",0x29)] [InlineData("-","_",0x0C)] [InlineData("=","+",0x0D)]
-    [InlineData("[","{",0x1A)] [InlineData("]","}",0x1B)] [InlineData(";",":",0x27)]
-    [InlineData("'","@",0x28)] [InlineData("#","~",0x2B)] [InlineData("\\","|",0x56)]
-    [InlineData(",","<",0x33)] [InlineData(".",">",0x34)] [InlineData("/","?",0x35)]
-    public void UkPunctuationMapsBothShiftStates(string label, string shifted, int scan)
+    public void UkNumberRowMapsBothShiftStates(string label, string shifted, int scan)
     {
         var backend = new Backend();
         using var controller = new KeyboardController(backend, new Scheduler());
@@ -142,6 +138,126 @@ public sealed class KeyboardTests
         Assert.Empty(backend.Calls[0].Modifiers);
         Assert.Equal(new[] { KeyboardLayout.ShiftKey }, backend.Calls[1].Modifiers);
         Assert.False(controller.Shift);
+    }
+
+    [Theory]
+    [InlineData("/",0x35,false)] [InlineData(":",0x27,true)] [InlineData(".",0x34,false)]
+    [InlineData(",",0x33,false)] [InlineData("?",0x35,true)] [InlineData("!",0x02,true)]
+    [InlineData("'",0x28,false)] [InlineData("-",0x0C,false)] [InlineData("@",0x28,true)]
+    [InlineData("\"",0x03,true)] [InlineData("£",0x04,true)] [InlineData("#",0x2B,false)]
+    [InlineData("$",0x05,true)] [InlineData("%",0x06,true)] [InlineData("&",0x08,true)]
+    [InlineData("*",0x09,true)] [InlineData("(",0x0A,true)] [InlineData(")",0x0B,true)]
+    [InlineData("[",0x1A,false)] [InlineData("]",0x1B,false)] [InlineData("{",0x1A,true)]
+    [InlineData("}",0x1B,true)] [InlineData("\\",0x56,false)] [InlineData("|",0x56,true)]
+    [InlineData("_",0x0C,true)] [InlineData("=",0x0D,false)] [InlineData("+",0x0D,true)]
+    [InlineData(";",0x27,false)] [InlineData("`",0x29,false)] [InlineData("¬",0x29,true)]
+    [InlineData("^",0x07,true)] [InlineData("~",0x2B,true)] [InlineData("<",0x33,true)] [InlineData(">",0x34,true)]
+    public void DedicatedCharactersUseExactUkChordsRegardlessOfShiftOrCaps(string label, int scan, bool shift)
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        var key = Find(label);
+        Assert.True(key.FixedCharacter);
+        Tap(controller, key);
+        Tap(controller, KeyboardLayout.Caps);
+        Tap(controller, "Shift");
+        Assert.Equal(label, controller.Label(key));
+        Tap(controller, key);
+        Assert.All(backend.Calls, c => {
+            Assert.Equal(InputKey.ScanCode((ushort)scan), c.Key);
+            Assert.Equal(shift ? new[] { KeyboardLayout.ShiftKey } : [], c.Modifiers);
+        });
+        Assert.False(controller.Shift);
+        Assert.True(controller.Caps);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void BothPrimaryLayoutsProvideDirectSlashAndNumbers(bool compact)
+    {
+        var layout = KeyboardLayout.Primary(compact ? PrimaryKeyboardLayout.Compact : PrimaryKeyboardLayout.Chat);
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler(), layout: compact ? PrimaryKeyboardLayout.Compact : PrimaryKeyboardLayout.Chat);
+        foreach (char label in "1234567890/")
+            Tap(controller, Assert.Single(layout.SelectMany(r => r), k => k.Id == label.ToString()));
+        Assert.Equal(11, backend.Calls.Count);
+        Assert.All(backend.Calls, call => Assert.Empty(call.Modifiers));
+        Assert.Equal(InputKey.ScanCode(0x35), backend.Calls.Last().Key);
+        Assert.False(controller.Symbols);
+        Assert.Equal(compact ? 5 : 6, layout.Count);
+    }
+
+    [Fact]
+    public void ChatRowsAndCompactControlsMatchTheRequestedArrangement()
+    {
+        string[][] expected = [
+            "1234567890".Select(c => c.ToString()).ToArray(),
+            "qwertyuiop".Select(c => c.ToString()).ToArray(),
+            "asdfghjkl".Select(c => c.ToString()).ToArray(),
+            ["Shift", "z", "x", "c", "v", "b", "n", "m", "backspace"],
+            ["/", ":", ".", ",", "?", "!", "'", "-"],
+            ["layout", "Ctrl", "Alt", "space", "left", "right", "enter"] ];
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], KeyboardLayout.Chat[i].Select(k => k.Id));
+        for (int i = 0; i < 4; i++) Assert.Equal(expected[i], KeyboardLayout.Compact[i].Select(k => k.Id));
+        Assert.Equal(new[] { "layout", "Ctrl", "Alt", "/", "space", "left", "right", "enter" }, KeyboardLayout.Compact[4].Select(k => k.Id));
+        Assert.All(KeyboardLayout.Chat[4], key => Assert.Equal(1, key.Width));
+        foreach (var page in new[] { KeyboardLayout.Chat, KeyboardLayout.Compact, KeyboardLayout.Symbols })
+        {
+            Assert.Equal(page.Sum(r => r.Count), page.SelectMany(r => r).Select(k => k.Id).Distinct().Count());
+            Assert.True(page.Last().Single(k => k.Id == "space").Width > 3);
+        }
+        Assert.Equal("ABC", KeyboardLayout.Symbols.Last()[0].Label);
+    }
+
+    [Theory]
+    [InlineData("/", false)] [InlineData(":", true)]
+    public void PunctuationRetainsShortcutModifiersAndConsumesLatches(string label, bool requiredShift)
+    {
+        var backend = new Backend();
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, "Ctrl"); Tap(controller, "Alt"); Tap(controller, "Shift");
+        Tap(controller, label);
+        var modifiers = new List<InputKey> { KeyboardLayout.CtrlKey, KeyboardLayout.AltKey };
+        if (requiredShift) modifiers.Add(KeyboardLayout.ShiftKey);
+        Assert.Equal(modifiers, Assert.Single(backend.Calls).Modifiers);
+        Assert.False(controller.Ctrl || controller.Alt || controller.Shift);
+        Tap(controller, "a"); Assert.Empty(backend.Calls.Last().Modifiers);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void SelectingPrimaryLayoutPreservesStateAndCancelsSessionsWithoutInput(bool symbols)
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler, symbols: symbols);
+        Tap(controller, KeyboardLayout.Caps);
+        controller.Begin(10, Find("backspace"));
+        controller.Begin(11, Find("a"));
+        Tap(controller, Find("Shift"), 12); Tap(controller, Find("Ctrl"), 12); Tap(controller, Find("Alt"), 12);
+        int calls = backend.Calls.Count;
+        controller.SelectLayout(PrimaryKeyboardLayout.Compact);
+        scheduler.Ticks[0].Fire(); controller.End(11, true);
+        Assert.Equal(calls, backend.Calls.Count);
+        Assert.Equal(0, controller.InteractionCount);
+        Assert.True(controller.Caps && controller.Shift && controller.Ctrl && controller.Alt);
+        Assert.Equal(symbols, controller.Symbols);
+        Assert.Equal(PrimaryKeyboardLayout.Compact, controller.SelectedLayout);
+        Tap(controller, "layout");
+        Assert.Equal(PrimaryKeyboardLayout.Compact, controller.SelectedLayout);
+        Assert.Equal(!symbols, controller.Symbols);
+        Assert.Equal(calls, backend.Calls.Count);
+    }
+
+    [Fact]
+    public void LayoutCleanupFailureClearsLatchesAndReportsFailure()
+    {
+        var backend = new Backend { CleanupFail = true };
+        using var controller = new KeyboardController(backend, new Scheduler());
+        Tap(controller, "Shift");
+        int failures = 0;
+        controller.InputFailed += () => failures++;
+        controller.SelectLayout(PrimaryKeyboardLayout.Compact);
+        Assert.False(controller.Shift); Assert.Equal(1, failures); Assert.Empty(backend.Calls);
     }
 
     [Theory]

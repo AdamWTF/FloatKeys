@@ -1,7 +1,9 @@
+using FloatKeys.Input;
+
 namespace FloatKeys.Models;
 
 internal sealed record WindowSettings(double? XPhysical = null, double? YPhysical = null,
-    double WidthDip = 840, double HeightDip = 360);
+    double WidthDip = KeyboardSizing.DefaultWidth, double HeightDip = 480);
 
 internal sealed record AppSettings
 {
@@ -9,6 +11,7 @@ internal sealed record AppSettings
     public WindowSettings Keyboard { get; init; } = new();
     public double LauncherOpacity { get; init; } = .85;
     public string Layout { get; init; } = "uk";
+    public string KeyboardLayout { get; init; } = "chat";
     public bool Symbols { get; init; }
     public bool StartWithWindows { get; init; }
     public string Theme { get; init; } = "dark";
@@ -20,12 +23,15 @@ internal sealed record AppSettings
         static double? Position(double? value) => value is double v && double.IsFinite(v) && Math.Abs(v) < 1_000_000 ? v : null;
         var launcher = Launcher ?? new(WidthDip: 56, HeightDip: 56);
         var keyboard = Keyboard ?? new();
+        var layout = KeyboardSizing.Parse(KeyboardLayout);
         double diameter = Size(launcher.WidthDip, 56, 48, 80);
         return this with
         {
             Launcher = launcher with { XPhysical = Position(launcher.XPhysical), YPhysical = Position(launcher.YPhysical), WidthDip = diameter, HeightDip = diameter },
             Keyboard = keyboard with { XPhysical = Position(keyboard.XPhysical), YPhysical = Position(keyboard.YPhysical),
-                WidthDip = Size(keyboard.WidthDip, 840, 720, 4096), HeightDip = Size(keyboard.HeightDip, 360, 360, 2160) },
+                WidthDip = Size(keyboard.WidthDip, KeyboardSizing.DefaultWidth, KeyboardSizing.MinimumWidth, 4096),
+                HeightDip = Size(keyboard.HeightDip, KeyboardSizing.DefaultHeight(layout), KeyboardSizing.MinimumHeight(layout, Symbols), 2160) },
+            KeyboardLayout = KeyboardSizing.Name(layout),
             LauncherOpacity = Size(LauncherOpacity, .85, .65, 1), Layout = "uk", Theme = "dark"
         };
     }

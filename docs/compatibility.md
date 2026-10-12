@@ -1,3 +1,31 @@
+# Keyboard redesign verification — 12 October 2026
+
+Host: Windows ARM64, SDK 10.0.300. x64 tests/probes execute under Windows ARM emulation.
+
+| Check | Result | Evidence/limits |
+|---|---|---|
+| ARM64 self-contained Release tests | Pass, 227/227, zero skipped | Layouts, UK scan-code chords, modifiers, switching, persistence, geometry and existing functionality |
+| x64 self-contained Release tests | Pass, 227/227, zero skipped | Same suite under emulation |
+| ARM64/x64 Release compilation | Pass, no compiler warnings/errors | Both runtime targets built by tests and packaging |
+| Locked restore and portable publish | Pass, both architectures | Existing dependency graph; no new packages |
+| Runtime architecture/bundle/archive/checksums | Pass, both architectures | Existing package/verification scripts; artifacts in `artifacts/keyboard-redesign` |
+| ARM64 isolated overlay probe | Pass | 50 visibility cycles, styles, tray lifecycle, modifier/focus-preserving selection, persistence and renderer geometry |
+| x64 isolated overlay probe | Pass under emulation | Same checks |
+| Layout rendering | Pass | Chat/Compact/Symbols at default/minimum/enlarged/portrait sizes; 96/144/192 DPI images; labels fit and targets exceed 44 DIPs |
+| Physical touch, Notepad, Moonlight, WoW Forever | Pending | Follow [Surface checklist](keyboard-redesign.md#surface-pro-11-manual-checklist--pending) |
+
+The isolated probe does not inject native keyboard input or change startup registration.
+The compiler/test runner required execution outside the sandbox; the sandbox baseline runner
+stalled. Both architecture suites completed successfully outside it. No GitHub workflow run,
+release or tag was created. Existing v0.1.0 published downloads are unchanged.
+
+UK mappings are verified as scan-code/Shift chords; Windows/remote target character output
+still requires manual testing with UK English selected. External physical modifiers are
+not overridden. Tiny displays retain scrolling. See the [redesign report](keyboard-redesign.md)
+for the implementation decisions, changed files and remaining acceptance steps.
+
+The milestone sections below are historical results for the previous keyboard.
+
 # Milestone 4 verification — 12 October 2026
 
 Host: Windows ARM64 with .NET SDK 10.0.300. x64 execution uses Windows ARM

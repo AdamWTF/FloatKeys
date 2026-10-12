@@ -41,9 +41,12 @@ internal sealed class SettingsService
                     Read(element, "WidthDip", fallback.WidthDip), Read(element, "HeightDip", fallback.HeightDip));
             }
             var defaults = new AppSettings();
+            string preferredLayout = Read(document.RootElement, "KeyboardLayout", "chat");
+            var keyboardDefaults = new WindowSettings(HeightDip: FloatKeys.Input.KeyboardSizing.DefaultHeight(FloatKeys.Input.KeyboardSizing.Parse(preferredLayout)));
             var raw = new AppSettings
             {
-                Launcher = Window("Launcher", defaults.Launcher), Keyboard = Window("Keyboard", defaults.Keyboard),
+                Launcher = Window("Launcher", defaults.Launcher), Keyboard = Window("Keyboard", keyboardDefaults),
+                KeyboardLayout = preferredLayout,
                 LauncherOpacity = Read(document.RootElement, "LauncherOpacity", .85),
                 Symbols = Read(document.RootElement, "Symbols", false),
                 StartWithWindows = Read(document.RootElement, "StartWithWindows", false),

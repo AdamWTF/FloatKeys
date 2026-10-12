@@ -1,3 +1,32 @@
+# Keyboard redesign architecture
+
+The primary keyboard now defaults to six-row Chat, with five-row Compact selected through
+the existing non-focusable touch control in the header. KeyboardController owns
+SelectedLayout independently of Symbols; selecting a primary layout stops sessions and
+releases owned input before rebuilding controls, preserving modifier latches and local Caps.
+Symbols changes preserve the selected primary layout. Hide/cancellation behavior is unchanged.
+
+KeyDefinition distinguishes fixed characters from ordinary letters/digits and records their
+required UK Shift. Snapshot uses that requirement for punctuation instead of the user Shift
+latch, while retaining Ctrl/Alt and consuming all one-shot latches. The backend, transport,
+physical modifier borrowing and partial-submission cleanup remain unchanged.
+
+AppSettings adds the string KeyboardLayout (`chat`/`compact`) alongside the existing UK
+Layout and Symbols fields. Missing/invalid selections default to Chat; old geometry is
+validated against the visible page minimum. SettingsService retains atomic replacement.
+KeyboardSizing centralizes DIP dimensions for validation, WPF content, native resizing and
+recovery. Weighted grids resize keys; the nine-letter home row has half-column end spacers.
+The header remains fixed-height and labels fit at the enforced minima. The content retains
+scrolling for displays smaller than those minima. Geometry changes use SWP_NOACTIVATE.
+
+The redesign modifies keyboard definitions/controller, KeyboardWindow and KeyboardKey,
+settings/geometry/overlay coordination, keyboard/settings/geometry tests and the isolated
+STA probe. No public input API, dependency, driver, startup or tray interface changed.
+See [verification and file inventory](keyboard-redesign.md).
+
+The milestone sections below describe historical implementations. This section supersedes
+their four-row primary keyboard, shifted punctuation and fixed 720 × 360 minimum.
+
 # Milestone 4 architecture
 
 `App` acquires a Local-session named mutex keyed by the current user's SID before

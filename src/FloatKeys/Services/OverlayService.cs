@@ -52,7 +52,7 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
         storage = settingsService ?? new(log: log.Write);
         settings = storage.Load();
         launcher = new();
-        keyboard = new(input, log, settings.Symbols);
+        keyboard = new(input, log, settings.Symbols, KeyboardSizing.Parse(settings.KeyboardLayout));
         visibility = new(() =>
         {
             RepairBounds();
@@ -61,7 +61,7 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
             Save();
         }, () => { keyboard.CancelGeometry(); keyboard.CancelInteractions(); }, keyboard.Hide);
         keyboard.CollapseRequested += visibility.Hide;
-        keyboard.LayoutChanged += Save;
+        keyboard.LayoutChanged += ChangeLayout;
         keyboard.SizeStep += step => ChangePreferences(step * 8, 0);
         keyboard.OpacityStep += step => ChangePreferences(0, step * .05);
         launcher.Closing += LauncherClosing;
@@ -166,7 +166,11 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
         foreach (var hwnd in new[] { launcherHwnd, keyboardHwnd })
         {
             var current = Bounds(hwnd);
-            var valid = OverlayGeometry.Recover(current, displays, hwnd == launcherHwnd);
+            var valid = hwnd == keyboardHwnd
+                ? OverlayGeometry.EnsureKeyboardSize(current, Scale(hwnd), keyboard.SelectedLayout, keyboard.Symbols,
+                    OverlayGeometry.Nearest(current, displays).Bounds)
+                : current;
+            valid = OverlayGeometry.Recover(valid, displays, hwnd == launcherHwnd);
             if (valid != current) Apply(hwnd, valid);
         }
         OrderLauncher();
@@ -195,7 +199,7 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
             var display = OverlayGeometry.Nearest(resize ? start : candidate, displays);
             // Use the actual current window DPI; WPF handles changes crossing display boundaries.
             nint hwnd = Handle(window);
-            if (resize) candidate = OverlayGeometry.Resize(start, delta.X, delta.Y, Scale(hwnd), display.Bounds);
+            if (resize) candidate = OverlayGeometry.Resize(start, delta.X, delta.Y, Scale(hwnd), display.Bounds, keyboard.SelectedLayout, keyboard.Symbols);
             else
             {
                 var current = Bounds(hwnd);
@@ -230,8 +234,16 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
     private void Save()
     {
         if (!started || disposed) return;
-        settings = settings with { Launcher = Snapshot(launcherHwnd, settings.Launcher), Keyboard = Snapshot(keyboardHwnd, settings.Keyboard), Symbols = keyboard.Symbols };
+        settings = settings with { Launcher = Snapshot(launcherHwnd, settings.Launcher), Keyboard = Snapshot(keyboardHwnd, settings.Keyboard),
+            Symbols = keyboard.Symbols, KeyboardLayout = KeyboardSizing.Name(keyboard.SelectedLayout) };
         storage.Save(settings);
+    }
+    private void ChangeLayout()
+    {
+        if (!started || disposed) return;
+        keyboard.CancelGeometry();
+        RepairBounds();
+        Save();
     }
     private static WindowSettings Snapshot(nint hwnd, WindowSettings fallback)
     {
@@ -285,7 +297,7 @@ internal sealed class OverlayService : IDisposable, IOverlayCommands
         hooks.Clear();
         launcher.Closing -= LauncherClosing;
         keyboard.DismissRequested -= HideKeyboard;
-        keyboard.LayoutChanged -= Save;
+        keyboard.LayoutChanged -= ChangeLayout;
         keyboard.AllowClose = true;
         ShutdownCoordinator.Try("keyboard close", keyboard.Close, log.Write);
         ShutdownCoordinator.Try("launcher close", launcher.Close, log.Write);

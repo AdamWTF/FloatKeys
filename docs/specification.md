@@ -180,18 +180,34 @@ Use safe defaults when settings are missing or invalid.
 
 ## 5. Keyboard Layout and Behaviour
 
-### 5.1 Standard layout
+### 5.1 Chat and Compact layouts
 
 Implement an English QWERTY layout.
 
-Rows:
+Chat is the default primary layout. Rows:
 
-**Row 1:** Q W E R T Y U I O P  
-**Row 2:** A S D F G H J K L  
-**Row 3:** Shift Z X C V B N M Backspace  
-**Row 4:** Symbols Ctrl Alt Space Left Right Enter
+- **Row 1:** 1 2 3 4 5 6 7 8 9 0
+- **Row 2:** Q W E R T Y U I O P
+- **Row 3:** A S D F G H J K L
+- **Row 4:** Shift Z X C V B N M Backspace
+- **Row 5:** / : . , ? ! ' -
+- **Row 6:** ?123 Ctrl Alt Space Left Right Enter
 
-Add a secondary symbols layout with digits, punctuation and common special characters.
+Compact retains rows 1–4 and uses `?123 Ctrl Alt / Space Left Right Enter` as row 5.
+Both layouts expose numbers and an ordinary forward slash with one tap, without modifiers.
+The non-focusable header selector saves Chat/Compact independently of Symbols visibility.
+Legacy settings default to Chat. Selection preserves Caps/modifier latches, position and
+sufficient dimensions; pending taps/repeats are cancelled without typing.
+
+The shared Symbols page exposes remaining UK punctuation and special keys. ABC returns
+to the selected primary layout. Dedicated punctuation retains its label and character when
+one-shot Shift is latched; the tap consumes latches and includes required Shift internally.
+Numbers keep ordinary UK shifted labels. Ctrl/Alt still participate in shortcuts.
+
+Use proportional WPF rows/columns and 44 × 44 DIP minimum key surfaces. Chat defaults
+to 840 × 480 DIPs, minimum 720 × 432. Compact defaults to 840 × 420, minimum 720 × 382;
+Symbols also uses the five-row minimum. Switching only grows deficient dimensions.
+Keep content scrollable when the physical display is too small; never transform-scale keys.
 
 Include support for the UK keyboard layout and its punctuation mappings. Do not assume US keyboard key positions.
 

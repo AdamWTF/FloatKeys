@@ -13,12 +13,14 @@ public partial class KeyboardWindow : Window
     private readonly AppLog log;
     private readonly List<(KeyboardKey Control, KeyDefinition Definition)> controls = [];
     private bool shownSymbols;
+    private PrimaryKeyboardLayout shownLayout;
     private bool closing;
     private readonly List<KeyboardKey> actions = [];
     private KeyboardKey? sizeLabel, opacityLabel;
     internal PointerHandle DragHandle { get; }
     internal PointerHandle ResizeHandle { get; }
     internal bool Symbols => controller.Symbols;
+    internal PrimaryKeyboardLayout SelectedLayout => controller.SelectedLayout;
     internal event Action? CollapseRequested;
     internal event Action? DismissRequested;
     internal bool AllowClose { get; set; }
@@ -26,10 +28,10 @@ public partial class KeyboardWindow : Window
     internal event Action<int>? SizeStep;
     internal event Action<int>? OpacityStep;
 
-    internal KeyboardWindow(IInputBackend input, AppLog log, bool symbols = false)
+    internal KeyboardWindow(IInputBackend input, AppLog log, bool symbols = false, PrimaryKeyboardLayout layout = PrimaryKeyboardLayout.Chat)
     {
         this.log = log;
-        controller = new KeyboardController(input, new DispatcherRepeatScheduler(), symbols: symbols);
+        controller = new KeyboardController(input, new DispatcherRepeatScheduler(), symbols: symbols, layout: layout);
         InitializeComponent();
         DragHandle = new(DragSurface);
         ResizeHandle = new(ResizeSurface);
@@ -64,6 +66,10 @@ public partial class KeyboardWindow : Window
         var caps = CreateKey(KeyboardLayout.Caps);
         caps.Width = 112;
         HeaderKeys.Children.Add(caps);
+        var selector = ActionKey(controller.SelectedLayout.ToString(), () =>
+            controller.SelectLayout(controller.SelectedLayout == PrimaryKeyboardLayout.Chat ? PrimaryKeyboardLayout.Compact : PrimaryKeyboardLayout.Chat), 112);
+        selector.ToolTip = "Switch between Chat and Compact layouts";
+        HeaderKeys.Children.Add(selector);
         HeaderKeys.Children.Add(ActionKey("⚙", () =>
         {
             CancelInteractions();
@@ -74,30 +80,37 @@ public partial class KeyboardWindow : Window
         var minimise = ActionKey("−", () => CollapseRequested?.Invoke());
         minimise.ToolTip = "Minimise keyboard";
         HeaderKeys.Children.Add(minimise);
-        var layout = controller.Symbols ? KeyboardLayout.Symbols : KeyboardLayout.Main;
+        var layout = controller.Symbols ? KeyboardLayout.Symbols : KeyboardLayout.Primary(controller.SelectedLayout);
+        LayoutRoot.MinWidth = KeyboardSizing.MinimumWidth - 26;
+        LayoutRoot.MinHeight = KeyboardSizing.MinimumHeight(controller.SelectedLayout, controller.Symbols) - 26;
         KeyRows.RowDefinitions.Clear();
         int rowIndex = 0;
         foreach (var row in layout)
         {
-            KeyRows.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            KeyRows.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = KeyboardSizing.TouchSize + 6 });
             var grid = new Grid();
             Grid.SetRow(grid, rowIndex++);
+            bool home = row.Count == 9 && row.All(key => key.Letter);
+            if (home) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(.5, GridUnitType.Star) });
             for (int i = 0; i < row.Count; i++)
             {
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(row[i].Width, GridUnitType.Star) });
                 var key = CreateKey(row[i]);
-                Grid.SetColumn(key, i);
+                Grid.SetColumn(key, home ? i + 1 : i);
                 grid.Children.Add(key);
             }
+            if (home) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(.5, GridUnitType.Star) });
             KeyRows.Children.Add(grid);
         }
         shownSymbols = controller.Symbols;
+        shownLayout = controller.SelectedLayout;
         Refresh();
     }
 
     private KeyboardKey CreateKey(KeyDefinition definition)
     {
-        var key = new KeyboardKey { Margin = new Thickness(3), Label = controller.Label(definition) };
+        var key = new KeyboardKey { Margin = new Thickness(3), Label = controller.Label(definition),
+            ToolTip = definition.Id == "backspace" ? "Backspace" : definition.Label };
         key.SetAppearance(definition.Style, controller.Active(definition));
         key.Captured += pointer =>
         {
@@ -112,7 +125,7 @@ public partial class KeyboardWindow : Window
     private void Refresh()
     {
         if (closing) return;
-        if (shownSymbols != controller.Symbols) { BuildKeys(); LayoutChanged?.Invoke(); return; }
+        if (shownSymbols != controller.Symbols || shownLayout != controller.SelectedLayout) { BuildKeys(); LayoutChanged?.Invoke(); return; }
         foreach (var (key, definition) in controls)
         {
             key.Label = controller.Label(definition);

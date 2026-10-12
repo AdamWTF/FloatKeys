@@ -23,6 +23,7 @@ public partial class KeyboardKey : UserControl
     private static readonly Brush Special = Brush(44, 52, 66);
     private static readonly Brush Modifier = Brush(58, 51, 76);
     private static readonly Brush Enter = Brush(36, 79, 75);
+    private static readonly Brush Slash = Brush(43, 66, 83);
     private static readonly Brush Pressed = Brush(69, 106, 153);
     private static readonly Brush Active = Brush(54, 112, 158);
     private static Brush Brush(byte r, byte g, byte b)
@@ -39,7 +40,7 @@ public partial class KeyboardKey : UserControl
     }
     private void Refresh() => Surface.Background = pointer.Owner is not null ? Pressed : active ? Active : style switch
     {
-        KeyStyle.Modifier => Modifier, KeyStyle.Special => Special, KeyStyle.Enter => Enter, _ => Normal
+        KeyStyle.Modifier => Modifier, KeyStyle.Special => Special, KeyStyle.Enter => Enter, KeyStyle.Slash => Slash, _ => Normal
     };
 
     public KeyboardKey()

@@ -1,7 +1,7 @@
 # FloatKeys
 
 FloatKeys v0.1.0 is a portable UK touchscreen keyboard for Windows 11 / .NET 10 / WPF.
-The draggable, non-activating, always-on-top overlay provides QWERTY, digits, UK punctuation,
+The draggable, non-activating, always-on-top overlay provides Chat and Compact QWERTY layouts, direct digits and `/`, UK punctuation,
 Shift, local Caps Lock, latched Ctrl/Alt, special keys and hold-to-repeat navigation/deletion.
 Focus a target text field before tapping FloatKeys. No application-specific integration is used.
 
@@ -35,7 +35,9 @@ and terminates the process.
 
 The gear button opens a small launcher settings panel: use +/− to adjust size
 (48–80 DIPs) and background opacity (65–100%). Tap the gear again to return to typing.
-Positions, dimensions and ABC/Symbols selection are saved automatically in
+Tap **Chat** or **Compact** in the header to switch the primary layout. Chat is the default
+and adds a dedicated punctuation row; Compact uses five rows with `/` beside Space.
+Positions, dimensions, primary layout and ABC/Symbols selection are saved automatically in
 `%LOCALAPPDATA%\FloatKeys\settings.json`. Missing/corrupt settings recover to defaults.
 Restart always begins with the launcher visible and keyboard hidden. A second launch
 in the same Windows user session exits quietly without creating additional windows.
@@ -61,12 +63,18 @@ There is no telemetry, analytics, typed-key logging or clipboard collection.
 
 ## Keyboard behavior
 
+- **Chat/Compact:** changes the preferred primary layout without typing or taking focus.
+  Caps and modifier latches survive the switch; pending touches/repeats are cancelled.
+- **Direct punctuation:** `/ : . , ? ! ' -` on Chat and all punctuation on Symbols
+  always type their displayed character, including when FloatKeys Shift is latched.
+  The tap consumes Shift/Ctrl/Alt; required UK Shift is added internally. Ctrl/Alt
+  still participate in shortcuts. Numbers retain their UK shifted characters.
 - **Shift:** tap to latch/unlatch; consumed by the next input, including arrows/Tab.
 - **Caps Lock:** toggles capitalisation for FloatKeys letters only; Shift temporarily
   reverses it. It does not toggle Windows or remote Caps Lock.
 - **Ctrl/Alt:** tap to latch, then tap the desired key. Combine modifiers if needed.
   Caps does not add Shift to Ctrl/Alt shortcuts. For Alt+Tab, tap Alt → Symbols → Tab.
-- **Symbols/ABC:** switches layouts and preserves latches and Caps. Pending touches
+- **?123/ABC:** opens Symbols or returns to the selected Chat/Compact layout, preserving latches and Caps. Pending touches
   and repeats are cancelled before switching.
 - **Backspace/Delete/arrows:** press sends one event pair immediately; holding repeats
   after 450 ms at 60 ms intervals. Release adds no extra input.
@@ -76,6 +84,11 @@ There is no telemetry, analytics, typed-key logging or clipboard collection.
 Choose UK English on both local and remote systems, with physical Caps Lock off and
 physical modifiers released for baseline tests. Physical keyboard state can affect output.
 Unicode entry remains a separate backend capability; visible keys send physical events.
+
+Chat defaults to 840 × 480 DIPs with a 720 × 432 minimum; Compact and Symbols have
+a 720 × 382 minimum. Keys resize proportionally with at least 44 × 44 DIP surfaces.
+Switching pages grows insufficient dimensions and otherwise keeps size/position.
+If the display cannot fit usable content, scrollbars provide access to the full keyboard.
 
 ## Build and verify
 
@@ -100,7 +113,8 @@ git diff --check
 
 See [architecture and file inventory](docs/architecture.md),
 [verification results, manual checklist and limitations](docs/compatibility.md),
-and the unchanged [v0.1 specification](docs/specification.md).
+the [updated specification](docs/specification.md), and the
+[keyboard redesign report and Surface checklist](docs/keyboard-redesign.md).
 
 Milestone 1 was built and manually tested successfully, as confirmed by the user.
 The updated overlay still needs physical touch and application compatibility validation.
