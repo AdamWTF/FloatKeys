@@ -1,15 +1,20 @@
-FloatKeys v0.1.0 release candidate provides a floating UK touchscreen keyboard for
-Windows 11 ARM64 and x64, with non-activating overlays, draggable launcher,
-keyboard positioning/resizing and per-user settings.
+# FloatKeys v0.1.0
 
-This release adds a persistent system tray menu, optional per-user Windows startup,
-single-instance protection, clean shutdown, bounded local diagnostics and
-self-contained portable packages. No installer or separate .NET runtime is needed.
+FloatKeys provides a floating UK touchscreen keyboard for Windows 11 ARM64 and x64.
+Chat offers a dedicated punctuation row; Compact keeps digits and slash accessible
+in five rows. A shared Symbols page provides additional punctuation and special keys.
+Primary layout selection, positions, dimensions, and appearance are saved automatically.
 
-Focus a target text field before typing. Synthetic input and overlay visibility
-depend on the target application and fullscreen mode. Surface touch, Moonlight
-and WoW Forever acceptance testing remains pending; no untested compatibility
-is claimed. Caps Lock controls FloatKeys capitalization only.
+The non-activating keyboard and launcher can be dragged; the keyboard can be resized.
+A persistent tray menu controls visibility, settings, optional Windows startup, and exit.
+Single-instance protection and clean shutdown help prevent duplicate overlays
+and stuck input. Portable packages need no installer or separate .NET runtime.
 
-Download the archive matching your architecture, verify it against SHA256SUMS.txt,
-extract it, and run FloatKeys.exe. Use the tray menu's Exit FloatKeys to quit.
+Focus a target field before typing and select UK English. Caps Lock controls
+FloatKeys capitalization only. Synthetic input and fullscreen visibility depend
+on the target application. Physical touch and current Notepad, Moonlight, and
+WoW Forever acceptance remain pending. Packages are unsigned.
+
+Download the archive for your architecture, verify it against `SHA256SUMS.txt`,
+extract the complete contents, and run `FloatKeys.exe`. Quit from **Exit FloatKeys**
+in the system tray menu.

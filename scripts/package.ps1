@@ -1,6 +1,6 @@
 #requires -Version 7.4
 param(
-    [string] $Version = '0.1.0',
+    [string] $Version,
     [ValidateSet('SingleFile', 'Directory')] [string] $Deployment = 'SingleFile',
     [string] $OutputDirectory = (Join-Path $PSScriptRoot '../artifacts/release')
 )
@@ -8,9 +8,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $output = [IO.Path]::GetFullPath($OutputDirectory)
-if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'Expected MAJOR.MINOR.PATCH version.' }
-[xml]$project = Get-Content -LiteralPath (Join-Path $root 'src/FloatKeys/FloatKeys.csproj') -Raw
-if ($project.Project.PropertyGroup.Version -ne $Version) { throw 'Package version must match the project version.' }
+$Version = & (Join-Path $PSScriptRoot 'verify-version.ps1') -Version $Version
 # Only clean known, generated subdirectories beneath the requested output directory.
 [IO.Directory]::CreateDirectory($output) | Out-Null
 function Invoke-Dotnet([string[]] $Arguments) {

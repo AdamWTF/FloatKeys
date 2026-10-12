@@ -88,7 +88,7 @@ public sealed class SendInputBackend : IInputBackend
             if (disposed || cleanupPending)
                 return InputResult.Rejected("Input is unavailable until cleanup completes.");
             // One UTF-16 unit per pair, including both halves of supplementary characters.
-            // Cap one submission to avoid unbounded allocation; not used by the prototype UI.
+            // Cap one submission to avoid unbounded allocation; not used by visible keys.
             if (text.Length > 4096) return InputResult.Rejected("Text exceeds 4096 UTF-16 units.");
             if (text.Any(c => state.Contains(InputKey.Unicode(c))))
                 return InputResult.Rejected("A Unicode key is already owned by FloatKeys.");

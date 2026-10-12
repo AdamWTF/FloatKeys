@@ -1,141 +1,87 @@
 # FloatKeys
 
-FloatKeys v0.1.0 is a portable UK touchscreen keyboard for Windows 11 / .NET 10 / WPF.
-The draggable, non-activating, always-on-top overlay provides Chat and Compact QWERTY layouts, direct digits and `/`, UK punctuation,
-Shift, local Caps Lock, latched Ctrl/Alt, special keys and hold-to-repeat navigation/deletion.
-Focus a target text field before tapping FloatKeys. No application-specific integration is used.
+A portable UK touchscreen keyboard for Windows 11, built with .NET 10 and WPF.
+FloatKeys floats above ordinary windows and sends input to the text field you have
+focused. It provides Chat and Compact layouts, a Symbols page, draggable overlays,
+resizing, and a system tray menu.
 
-## Run on Surface Pro 11
+## Install and run
 
-Windows 11 ARM64 (Surface Pro 11) and x64 are the supported build targets. Physical
-touch and application acceptance remain subject to the checklist below; x64 execution
-on this ARM64 development host is emulation, not testing on a conventional x64 PC.
+From the repository's GitHub Releases page, when available, download
+`FloatKeys-v0.1.0-win-arm64.zip` for Surface Pro 11 or
+`FloatKeys-v0.1.0-win-x64.zip` for an x64 PC. [Verify the checksum](docs/releases.md#verify-a-download),
+extract the complete archive to a permanent folder, and run `FloatKeys.exe`.
+No installer, administrator privileges, or separate .NET runtime is required.
+Bundled native libraries extract into the per-user temporary cache at startup.
 
-On the repository's GitHub **Releases** page, download
-`FloatKeys-v0.1.0-win-arm64.zip` for Surface Pro 11, or
-`FloatKeys-v0.1.0-win-x64.zip` for an x64 PC, plus `SHA256SUMS.txt`.
-[Verify the checksum](docs/releases.md), extract the complete archive to a permanent
-folder and run `FloatKeys.exe`. No installer, administrator privileges or separate
-.NET runtime are needed. The single-file executable extracts bundled native runtime
-libraries into the ordinary per-user temporary cache at startup.
+- Tap the floating launcher to show or hide the keyboard; drag it to move it.
+- Focus your target text field before typing. FloatKeys does not focus it for you.
+- Drag the keyboard header to move it and its bottom-right handle to resize it.
+- Use the minus button to collapse the keyboard. Closing an overlay hides it.
+- Use the tray menu to restore either overlay, open Settings, or **Exit FloatKeys**.
+  Windows may place the tray icon in notification-area overflow.
 
-From this repository after packaging:
+## Keyboard and settings
 
-```powershell
-.\artifacts\release\win-arm64\FloatKeys.exe
-```
+**Chat** is the default six-row layout with digits and a dedicated punctuation row.
+**Compact** uses five rows with `/` beside Space. **?123** opens Symbols;
+**ABC** returns to the selected primary layout. Layout switches cancel pending
+touches and repeats while preserving Caps and modifier latches.
 
-It starts with a floating keyboard icon near the right edge of the primary display.
-Tap the icon to show/hide the keyboard; drag the icon to move it. Focus Notepad or your
-target application yourself, then tap keys. Drag the keyboard's header grip to move it
-and its bottom-right diagonal handle to resize it. The header minus button collapses it;
-the launcher remains available above the keyboard and FloatKeys stays running in the tray.
-Only the tray's **Exit FloatKeys** command closes both windows, releases owned input
-and terminates the process.
+- **Shift**, **Ctrl**, and **Alt** latch until the next input. Combine them for
+  shortcuts. For Alt+Tab, tap Alt, then Symbols, then Tab.
+- **Caps Lock** changes FloatKeys letters only; it does not toggle Windows Caps Lock.
+  Shift reverses letter capitalization, and Caps does not add Shift to Ctrl/Alt shortcuts.
+- Dedicated punctuation sends the displayed character regardless of latched Shift;
+  Ctrl/Alt still participate in shortcuts. Letters and digits use ordinary UK Shift mappings.
+- Holding Backspace, Delete, or an arrow repeats after 450 ms at 60 ms intervals.
+  Other keys commit on release inside the original key; leaving it cancels the tap.
+- Hiding the keyboard cancels pending input, repeats, and one-shot modifier latches.
 
-The gear button opens a small launcher settings panel: use +/− to adjust size
-(48–80 DIPs) and background opacity (65–100%). Tap the gear again to return to typing.
-Tap **Chat** or **Compact** in the header to switch the primary layout. Chat is the default
-and adds a dedicated punctuation row; Compact uses five rows with `/` beside Space.
-Positions, dimensions, primary layout and ABC/Symbols selection are saved automatically in
-`%LOCALAPPDATA%\FloatKeys\settings.json`. Missing/corrupt settings recover to defaults.
-Restart always begins with the launcher visible and keyboard hidden. A second launch
-in the same Windows user session exits quietly without creating additional windows.
+The gear opens inline settings for launcher size (48–80 DIPs) and background
+opacity (65–100%). Positions, keyboard dimensions, layout, and Symbols selection
+save automatically to `%LOCALAPPDATA%\FloatKeys\settings.json`. Invalid or missing
+settings recover to defaults. Restart shows the launcher with the keyboard hidden.
+Small displays use scrolling to keep keys accessible.
 
-## System tray and Windows startup
+**Start with Windows** is initially disabled. Enable it in the tray after placing
+the app in a permanent folder. It registers the current executable in the user's
+Run registry key. Run a relocated copy once to update an existing entry; disable
+startup from the same menu. Windows Startup Apps can separately suppress execution.
+A second launch in the same user session exits quietly.
 
-The FloatKeys tray icon remains available even when both overlays are hidden. Windows
-may place it in notification-area overflow. Right-click it for Show/Hide Keyboard,
-Show/Hide Launcher, Start with Windows, Settings and Exit FloatKeys. Settings opens
-the existing inline keyboard settings panel. Closing a window hides its overlay;
-it does not exit the application. Use the tray to restore a hidden launcher.
+## Compatibility and privacy
 
-Start with Windows is initially disabled. Enable it from the tray menu after placing
-FloatKeys in a permanent folder. It uses the current user's Run registry value and
-does not need elevation. Disable it from the same menu. If you move the executable,
-run the new copy once to update an existing startup entry. External removal of the
-entry stays disabled. Unexpected entries are left intact and registration failures
-are reported without crashing. Windows Startup Apps can separately suppress a Run
-entry; the tray checkmark represents registration, not an override of Windows policy.
+Windows 11 ARM64 and x64 packages are supported build targets. Use UK English
+locally and remotely; physical modifiers and Windows Caps Lock can affect output.
+Synthetic input may be rejected by elevated applications, games, or streaming clients.
+Secure desktop, UAC, and protected authentication screens are unsupported.
+Exclusive fullscreen and other topmost windows can obscure the overlay.
 
-Diagnostics are bounded local files in `%LOCALAPPDATA%\FloatKeys\logs\`.
-There is no telemetry, analytics, typed-key logging or clipboard collection.
+Physical touch and current Notepad, Moonlight, and WoW Forever input acceptance
+remain pending. See the [compatibility checklist](docs/compatibility.md).
+There are no application-specific integrations, privileged injection, global input hooks, drivers,
+background services, telemetry, typed-key logging, or clipboard collection.
+Bounded lifecycle diagnostics are stored in `%LOCALAPPDATA%\FloatKeys\logs\`.
 
-## Keyboard behavior
+## Build and test
 
-- **Chat/Compact:** changes the preferred primary layout without typing or taking focus.
-  Caps and modifier latches survive the switch; pending touches/repeats are cancelled.
-- **Direct punctuation:** `/ : . , ? ! ' -` on Chat and all punctuation on Symbols
-  always type their displayed character, including when FloatKeys Shift is latched.
-  The tap consumes Shift/Ctrl/Alt; required UK Shift is added internally. Ctrl/Alt
-  still participate in shortcuts. Numbers retain their UK shifted characters.
-- **Shift:** tap to latch/unlatch; consumed by the next input, including arrows/Tab.
-- **Caps Lock:** toggles capitalisation for FloatKeys letters only; Shift temporarily
-  reverses it. It does not toggle Windows or remote Caps Lock.
-- **Ctrl/Alt:** tap to latch, then tap the desired key. Combine modifiers if needed.
-  Caps does not add Shift to Ctrl/Alt shortcuts. For Alt+Tab, tap Alt → Symbols → Tab.
-- **?123/ABC:** opens Symbols or returns to the selected Chat/Compact layout, preserving latches and Caps. Pending touches
-  and repeats are cancelled before switching.
-- **Backspace/Delete/arrows:** press sends one event pair immediately; holding repeats
-  after 450 ms at 60 ms intervals. Release adds no extra input.
-- Ordinary keys commit on release inside the original key. Leaving a key or losing
-  capture cancels its gesture. Already emitted repeat pulses cannot be undone.
-
-Choose UK English on both local and remote systems, with physical Caps Lock off and
-physical modifiers released for baseline tests. Physical keyboard state can affect output.
-Unicode entry remains a separate backend capability; visible keys send physical events.
-
-Chat defaults to 840 × 480 DIPs with a 720 × 432 minimum; Compact and Symbols have
-a 720 × 382 minimum. Keys resize proportionally with at least 44 × 44 DIP surfaces.
-Switching pages grows insufficient dimensions and otherwise keeps size/position.
-If the display cannot fit usable content, scrollbars provide access to the full keyboard.
-
-## Build and verify
-
-Prerequisites: Windows 11, .NET SDK 10.0.300, PowerShell 7.4 or newer for packaging,
-and NuGet access for dependencies/runtime packs.
+Requires Windows, .NET SDK **10.0.300**, PowerShell **7.4+** for packaging,
+and NuGet access. Dependency lock files are committed.
 
 ```powershell
 dotnet restore FloatKeys.sln --locked-mode
 dotnet build FloatKeys.sln -c Release --no-restore
-dotnet test FloatKeys.sln -c Release --no-build
-dotnet test FloatKeys.sln -c Release --arch x64 -p:SelfContained=true --no-restore
-.\scripts\package.ps1 -Version 0.1.0
-.\scripts\verify-packages.ps1 -Directory artifacts/release -Version 0.1.0
-.\scripts\verify-overlay.ps1 -Executable .\artifacts\release\win-arm64\FloatKeys.exe
-.\scripts\verify-overlay.ps1 -Executable .\artifacts\release\win-x64\FloatKeys.exe
-dotnet publish scripts/OverlayProbe/OverlayProbe.csproj -c Release -r win-arm64 --self-contained true -o artifacts/probe-arm64
-dotnet publish scripts/OverlayProbe/OverlayProbe.csproj -c Release -r win-x64 --self-contained true -o artifacts/probe-x64
-.\scripts\verify-overlay.ps1 -Executable .\artifacts\release\win-arm64\FloatKeys.exe -LifecycleProbe .\artifacts\probe-arm64\FloatKeys.Tests.exe
-.\scripts\verify-overlay.ps1 -Executable .\artifacts\release\win-x64\FloatKeys.exe -LifecycleProbe .\artifacts\probe-x64\FloatKeys.Tests.exe
-git diff --check
+dotnet test FloatKeys.sln -c Release --no-build --no-restore
+./scripts/package.ps1
+./scripts/verify-packages.ps1 -Directory artifacts/release -Version 0.1.0
 ```
 
-See [architecture and file inventory](docs/architecture.md),
-[verification results, manual checklist and limitations](docs/compatibility.md),
-the [updated specification](docs/specification.md), and the
-[keyboard redesign report and Surface checklist](docs/keyboard-redesign.md).
+Packages are written to `artifacts/release`. CI builds, tests, and packages both
+architectures; stable version tags trigger GitHub Releases. See
+[release instructions](docs/releases.md), [architecture](docs/architecture.md),
+and [verification procedures](docs/compatibility.md) for maintenance details.
 
-Milestone 1 was built and manually tested successfully, as confirmed by the user.
-The updated overlay still needs physical touch and application compatibility validation.
-The development probe uses a backend that cannot inject input and isolated settings;
-it checks real HWND lifecycle, native positioning, foreground preservation and offscreen
-layout rendering. It does not simulate physical touch or prove target input delivery.
-CI builds/tests/packages both architectures. Tagged releases publish independent
-archives and SHA-256 checksums. See [release instructions](docs/releases.md) for the
-first release; no release or tag is created by building locally.
+## License
 
-## Input compatibility and limitations
-
-Focus the desired text field yourself. Visible keys send balanced physical-style
-SendInput events and assume UK layout; local Caps does not change Windows Caps Lock.
-Synthetic input may be rejected by elevated, protected or raw-input targets.
-Secure desktop, UAC and protected authentication screens are unsupported. Exclusive
-fullscreen or another topmost window can obscure FloatKeys.
-
-Moonlight receives local input and may forward it to the remote PC depending on capture
-settings and input handling. Test windowed and fullscreen separately. Games, including
-WoW Forever, may use different input paths. Neither target is special-cased and current
-compatibility is not claimed without physical testing. No hooks, privileged injection,
-drivers, services, target-field detection or application-specific APIs are used.
-Forced termination or rejected native releases cannot guarantee key cleanup.
+[MIT](LICENSE). Portable packages include redistributed .NET license notices.

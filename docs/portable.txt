@@ -5,6 +5,8 @@ ordinary user; no installer or separate .NET runtime is needed. Choose win-arm64
 for Surface Pro 11 and win-x64 for conventional x64 Windows PCs.
 
 Tap the launcher to show/hide the keyboard. Focus your target input field first.
+Chat provides a punctuation row; Compact keeps digits and slash in five rows.
+Use ?123 for Symbols and ABC to return to the selected primary layout.
 Use the system tray menu to show/hide either overlay, configure Start with Windows,
 open existing inline settings, or Exit FloatKeys. Closing an overlay hides it.
 The tray icon may be inside Windows' notification-area overflow.

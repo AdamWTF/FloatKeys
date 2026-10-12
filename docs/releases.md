@@ -1,93 +1,72 @@
-# Release preparation
+# Releases
 
-Use stable `vMAJOR.MINOR.PATCH` tags. The source project Version and tag must agree;
-FloatKeys v0.1.0 has assembly/file version 0.1.0.0. The manifest identity must also
-be updated for any future version. The current SDK is pinned in global.json;
-committed NuGet lock files are enforced by CI. Intentional dependency updates
-require regenerating and reviewing those lock files.
+## Prepare a candidate
 
-## Local validation
+Use stable `vMAJOR.MINOR.PATCH` tags. Update the project's Version, AssemblyVersion,
+FileVersion, manifest identity, release notes, and version examples together.
+Assembly/file/manifest versions use `MAJOR.MINOR.PATCH.0`. `verify-version.ps1`
+rejects disagreement; packaging derives the version from the project by default.
 
-On Windows with .NET SDK 10.0.300, PowerShell 7.4 or newer and NuGet access:
+The SDK is pinned in `global.json`; committed NuGet lock files are enforced.
+Intentional dependency updates require regenerating and reviewing lock files.
+Run the [build and test commands](../README.md#build-and-test) and
+[compatibility checks](compatibility.md), including physical acceptance where possible.
 
 ```powershell
-dotnet restore FloatKeys.sln --locked-mode
-dotnet build FloatKeys.sln -c Release --no-restore
-dotnet test FloatKeys.sln -c Release --no-build
-./scripts/package.ps1 -Version 0.1.0
+./scripts/verify-version.ps1 -Tag v0.1.0
+./scripts/package.ps1
 ./scripts/verify-packages.ps1 -Directory artifacts/release -Version 0.1.0
 ```
 
-The packaging script is shared by local builds, CI and releases. It produces
-self-contained single-file executables for win-arm64 and win-x64, including native
-runtime/WPF libraries for extraction under the runtime's ordinary per-user temp
-cache. Trimming is disabled. No runtime installation, administrator privileges,
-service or installer is required. Run from a user-writable permanent folder.
-Single-file native extraction requires writable temporary storage.
+Packaging creates self-contained ARM64 and x64 archives with `FloatKeys.exe`,
+`LICENSE.txt`, `README.txt`, and redistributed runtime notices under `licenses/`.
+It verifies native architecture, executable version, bundled runtime assets,
+archive contents, and SHA-256 checksums. No tests, probes, source, PDBs, settings,
+or logs ship. Single-file native extraction requires writable temporary storage.
+`-Deployment Directory` is a diagnostic fallback; any change to release format
+requires updating both workflows and documenting the reason.
 
-`-Deployment Directory` is an explicit fallback for investigating a demonstrated
-single-file incompatibility. It is not the default release format. If needed,
-validate both architectures, change both workflows to use it and document the
-reason before publishing. Do not distribute an incomplete folder.
+## GitHub Actions
 
-Each archive has FloatKeys.exe, LICENSE.txt and README.txt at its root, plus
-redistributed .NET runtime licenses/notices under licenses/. No test/probe/source/PDB/settings/log files
-are distributed. The script validates executable architecture/version, required
-native runtime-pack assets and bundled WPF libraries, archive contents, names and SHA-256 checksums. Copy
-the complete extracted contents; existing settings stay under LocalAppData.
+Windows CI runs on pushes and pull requests targeting `main`. It validates versions,
+restores locked dependencies, builds/tests Release, packages both architectures,
+and uploads portable archives/checksums for 14 days. Test reports upload even after
+a failure when available; newer runs cancel obsolete CI for the same branch or PR.
+External actions are pinned to verified commit SHAs with version comments; review
+and update those pins deliberately.
 
-## Workflows and first release
+The tag workflow requires a matching source/tag version and successful build,
+tests, and packaging. Validation has read-only repository permissions; only the
+publication job has `contents: write`. It verifies downloaded assets, creates a
+draft release, uploads assets, then publishes. Upload failures leave any draft
+unpublished. Existing releases are not overwritten: inspect an incomplete draft
+and deliberately remove it before retrying.
 
-Windows CI runs on pushes and pull requests targeting main. It restores locked
-dependencies, builds/tests Release, publishes both architectures, and uploads
-the archives/checksums as the FloatKeys-portable Actions artifact for 14 days.
-Windows-2025 is an x64 runner: ARM64 packaging is cross-compilation, not ARM64
-execution. Physical acceptance and ARM64 execution are separate release checks.
+The `windows-2025` runner is x64. ARM64 packaging is cross-compilation and does not
+prove native ARM64 execution or physical touch/application compatibility.
 
-The tag workflow validates the version, builds/tests/packages with read-only
-permissions, then passes verified artifacts to a job with contents:write. GitHub
-CLI creates a draft release, uploads assets and only then publishes it. A failed
-build/test/package blocks this job; a failed upload leaves any draft unpublished.
-An existing release is not overwritten automatically on a rerun: inspect/delete
-an incomplete draft deliberately before retrying.
-
-Before the first release, complete and record the Surface checklist in
-[compatibility.md](compatibility.md), review release-notes.md and commit the final
-candidate. This checkout currently has no configured Git remote; configure the
-intended GitHub repository and push main before tagging. Once approved:
+This checkout has no Git remote configured. Once the candidate is committed,
+configure the intended GitHub repository and push `main`. To publish deliberately:
 
 ```powershell
 git tag -a v0.1.0 -m "FloatKeys v0.1.0"
 git push origin v0.1.0
 ```
 
-Those commands trigger publication. They are instructions, not commands run by
-the implementation. Assets appear on that repository's GitHub Releases page:
+The workflow publishes `FloatKeys-v0.1.0-win-arm64.zip`,
+`FloatKeys-v0.1.0-win-x64.zip`, and `SHA256SUMS.txt`. Local builds do not publish.
 
-- FloatKeys-v0.1.0-win-arm64.zip
-- FloatKeys-v0.1.0-win-x64.zip
-- SHA256SUMS.txt
+## Verify a download
 
-Packages are unsigned; Windows may show reputation warnings. SHA-256 verifies
-download integrity, not publisher authenticity. No signing credentials are used.
-
-## Verify a downloaded archive
-
-Download SHA256SUMS.txt from the same release. In PowerShell:
+Download the architecture-matching archive and `SHA256SUMS.txt` from the same release.
+Compare the full hash to the matching checksum line:
 
 ```powershell
 Get-FileHash ./FloatKeys-v0.1.0-win-arm64.zip -Algorithm SHA256
-```
-
-Compare the complete hash with that archive's line in SHA256SUMS.txt. With both
-archives and the repository verification script available:
-
-```powershell
-./scripts/verify-packages.ps1 -Directory C:/Downloads/FloatKeys -Version 0.1.0
 Expand-Archive ./FloatKeys-v0.1.0-win-arm64.zip -DestinationPath ./FloatKeys
 ./FloatKeys/FloatKeys.exe
 ```
 
-Check the extracted file list and version properties, then perform the manual
-acceptance checklist. Never infer touch/input/game compatibility from packaging
-or a build passing.
+Extract the complete archive into a permanent folder. Packages are unsigned;
+Windows may show reputation warnings. SHA-256 verifies download integrity,
+not publisher authenticity.
