@@ -37,8 +37,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        input?.Dispose();
         overlay?.Dispose();
+        input?.Dispose();
         log?.Write("shutdown");
         base.OnExit(e);
     }

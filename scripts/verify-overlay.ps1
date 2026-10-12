@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string] $Executable
+    [string] $Executable,
+    [string] $LifecycleProbe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,14 +19,14 @@ public static class OverlayProbe {
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll", SetLastError = true)] public static extern bool PostMessageW(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
-    public static IntPtr Find(uint process) {
+    public static IntPtr Find(uint process, string suffix) {
         IntPtr found = IntPtr.Zero;
         EnumWindows((window, _) => {
             uint owner;
             GetWindowThreadProcessId(window, out owner);
             var title = new StringBuilder(256);
             GetWindowText(window, title, title.Capacity);
-            if (owner == process && IsWindowVisible(window) && title.ToString().StartsWith("FloatKeys")) {
+            if (owner == process && title.ToString() == "FloatKeys — " + suffix) {
                 found = window;
                 return false;
             }
@@ -40,18 +41,23 @@ $resolvedExecutable = (Resolve-Path -LiteralPath $Executable).Path
 $foregroundBefore = [OverlayProbe]::GetForegroundWindow()
 $prototypeProcess = Start-Process -FilePath $resolvedExecutable -WindowStyle Hidden -PassThru
 $overlayHandle = [IntPtr]::Zero
+$keyboardHandle = [IntPtr]::Zero
 try {
     for ($attempt = 0; $attempt -lt 100; $attempt++) {
         if ($prototypeProcess.HasExited) { throw "Prototype exited before showing its window (exit $($prototypeProcess.ExitCode))." }
-        $overlayHandle = [OverlayProbe]::Find([uint32]$prototypeProcess.Id)
-        if ($overlayHandle -ne [IntPtr]::Zero) { break }
+        $overlayHandle = [OverlayProbe]::Find([uint32]$prototypeProcess.Id, 'Launcher')
+        $keyboardHandle = [OverlayProbe]::Find([uint32]$prototypeProcess.Id, 'Keyboard')
+        if ($overlayHandle -ne [IntPtr]::Zero -and $keyboardHandle -ne [IntPtr]::Zero -and [OverlayProbe]::IsWindowVisible($overlayHandle)) { break }
         Start-Sleep -Milliseconds 100
     }
-    if ($overlayHandle -eq [IntPtr]::Zero) { throw 'Visible prototype window was not found.' }
+    if ($overlayHandle -eq [IntPtr]::Zero -or $keyboardHandle -eq [IntPtr]::Zero) { throw 'Both overlay windows were not found.' }
     $styles = [OverlayProbe]::GetWindowLongPtr($overlayHandle, -20).ToInt64()
     $expectedStyles = 0x08000088 # WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST
     if (($styles -band $expectedStyles) -ne $expectedStyles) { throw ('Missing overlay styles: 0x{0:X}' -f $styles) }
     if (($styles -band 0x00040000) -ne 0) { throw 'WS_EX_APPWINDOW unexpectedly present.' }
+    $keyboardStyles = [OverlayProbe]::GetWindowLongPtr($keyboardHandle, -20).ToInt64()
+    if (($keyboardStyles -band $expectedStyles) -ne $expectedStyles -or ($keyboardStyles -band 0x00040000) -ne 0) { throw 'Invalid keyboard styles.' }
+    if ([OverlayProbe]::IsWindowVisible($keyboardHandle)) { throw 'Keyboard must start hidden.' }
     $foregroundAfter = [OverlayProbe]::GetForegroundWindow()
     if ($foregroundAfter -eq $overlayHandle) { throw 'Prototype became foreground during startup.' }
     if ($foregroundAfter -ne $foregroundBefore) { throw 'Foreground changed during smoke check; repeat without interacting with other windows.' }
@@ -65,4 +71,9 @@ finally {
         throw "Prototype process $($prototypeProcess.Id) did not exit; close it manually."
     }
     if ($prototypeProcess.ExitCode -ne 0) { throw "Prototype exited with code $($prototypeProcess.ExitCode)." }
+    if ([OverlayProbe]::GetForegroundWindow() -ne $foregroundBefore) { throw 'Foreground changed during shutdown.' }
+}
+if ($LifecycleProbe) {
+    & (Resolve-Path -LiteralPath $LifecycleProbe).Path
+    if ($LASTEXITCODE -ne 0) { throw 'Lifecycle/render probe failed.' }
 }

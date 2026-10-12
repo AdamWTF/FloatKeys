@@ -37,10 +37,11 @@ internal sealed class KeyboardController : IDisposable
     internal event Action? InputFailed;
     internal event Action? ExitRequested;
 
-    internal KeyboardController(IInputBackend input, IRepeatScheduler scheduler, RepeatTiming? timing = null)
+    internal KeyboardController(IInputBackend input, IRepeatScheduler scheduler, RepeatTiming? timing = null, bool symbols = false)
     {
         this.input = input;
         this.scheduler = scheduler;
+        Symbols = symbols;
         this.timing = timing ?? RepeatTiming.Default;
         if (this.timing.Delay <= TimeSpan.Zero || this.timing.Interval <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(timing));

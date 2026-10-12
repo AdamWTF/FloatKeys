@@ -14,16 +14,29 @@ public partial class KeyboardWindow : Window
     private readonly List<(KeyboardKey Control, KeyDefinition Definition)> controls = [];
     private bool shownSymbols;
     private bool closing;
+    private readonly List<KeyboardKey> actions = [];
+    private KeyboardKey? sizeLabel, opacityLabel;
+    internal PointerHandle DragHandle { get; }
+    internal PointerHandle ResizeHandle { get; }
+    internal bool Symbols => controller.Symbols;
+    internal event Action? CollapseRequested;
+    internal event Action? ExitRequested;
+    internal event Action? LayoutChanged;
+    internal event Action<int>? SizeStep;
+    internal event Action<int>? OpacityStep;
 
-    internal KeyboardWindow(IInputBackend input, PrototypeLog log)
+    internal KeyboardWindow(IInputBackend input, PrototypeLog log, bool symbols = false)
     {
         this.log = log;
-        controller = new KeyboardController(input, new DispatcherRepeatScheduler());
+        controller = new KeyboardController(input, new DispatcherRepeatScheduler(), symbols: symbols);
         InitializeComponent();
+        DragHandle = new(DragSurface);
+        ResizeHandle = new(ResizeSurface);
+        BuildSettings();
         controller.Changed += Refresh;
         controller.Result += ShowResult;
         controller.InputFailed += CancelControls;
-        controller.ExitRequested += Close;
+        controller.ExitRequested += () => ExitRequested?.Invoke();
         BuildKeys();
         Closing += (_, _) =>
         {
@@ -32,25 +45,36 @@ public partial class KeyboardWindow : Window
             CancelControls();
         };
         Unloaded += (_, _) => { controller.CancelAll(); CancelControls(); };
+        IsVisibleChanged += (_, _) => { if (!IsVisible) CloseSettings(); };
     }
 
     private void BuildKeys()
     {
         CancelControls();
         controls.Clear();
+        actions.RemoveAll(key => HeaderKeys.Children.Contains(key));
         HeaderKeys.Children.Clear();
         KeyRows.Children.Clear();
-        foreach (var definition in new[] { KeyboardLayout.Caps, KeyboardLayout.Exit })
+        var caps = CreateKey(KeyboardLayout.Caps);
+        caps.Width = 112;
+        HeaderKeys.Children.Add(caps);
+        HeaderKeys.Children.Add(ActionKey("⚙", () =>
         {
-            var key = CreateKey(definition);
-            key.Width = definition.Action == KeyAction.Caps ? 112 : 64;
-            key.VerticalAlignment = VerticalAlignment.Stretch;
-            HeaderKeys.Children.Add(key);
-        }
+            CancelInteractions();
+            bool open = SettingsPanel.Visibility != Visibility.Visible;
+            SettingsPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            KeyRows.IsEnabled = !open;
+        }));
+        HeaderKeys.Children.Add(ActionKey("−", () => CollapseRequested?.Invoke()));
+        HeaderKeys.Children.Add(ActionKey("Exit", () => ExitRequested?.Invoke(), 64));
         var layout = controller.Symbols ? KeyboardLayout.Symbols : KeyboardLayout.Main;
+        KeyRows.RowDefinitions.Clear();
+        int rowIndex = 0;
         foreach (var row in layout)
         {
-            var grid = new Grid { Height = 60 };
+            KeyRows.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            var grid = new Grid();
+            Grid.SetRow(grid, rowIndex++);
             for (int i = 0; i < row.Count; i++)
             {
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(row[i].Width, GridUnitType.Star) });
@@ -82,7 +106,7 @@ public partial class KeyboardWindow : Window
     private void Refresh()
     {
         if (closing) return;
-        if (shownSymbols != controller.Symbols) { BuildKeys(); return; }
+        if (shownSymbols != controller.Symbols) { BuildKeys(); LayoutChanged?.Invoke(); return; }
         foreach (var (key, definition) in controls)
         {
             key.Label = controller.Label(definition);
@@ -92,11 +116,44 @@ public partial class KeyboardWindow : Window
     private void CancelControls()
     {
         foreach (var (key, _) in controls.ToArray()) key.Cancel();
+        foreach (var key in actions.ToArray()) key.Cancel();
     }
     internal void CancelInteractions()
     {
         controller.CancelAll();
         CancelControls();
+    }
+    internal void CancelGeometry() { DragHandle.Cancel(); ResizeHandle.Cancel(); }
+    private KeyboardKey ActionKey(string label, Action callback, double width = 50)
+    {
+        var key = new KeyboardKey { Label = label, Width = width, Height = 46, Margin = new Thickness(3) };
+        key.SetAppearance(KeyStyle.Special, false);
+        key.Released += (_, inside) => { if (inside) callback(); };
+        actions.Add(key);
+        return key;
+    }
+    private void BuildSettings()
+    {
+        SizeSettings.Children.Add(ActionKey("−", () => SizeStep?.Invoke(-1)));
+        sizeLabel = ActionKey("56 DIP", () => { }, 180);
+        sizeLabel.IsHitTestVisible = false;
+        SizeSettings.Children.Add(sizeLabel);
+        SizeSettings.Children.Add(ActionKey("+", () => SizeStep?.Invoke(1)));
+        OpacitySettings.Children.Add(ActionKey("−", () => OpacityStep?.Invoke(-1)));
+        opacityLabel = ActionKey("85% opacity", () => { }, 180);
+        opacityLabel.IsHitTestVisible = false;
+        OpacitySettings.Children.Add(opacityLabel);
+        OpacitySettings.Children.Add(ActionKey("+", () => OpacityStep?.Invoke(1)));
+    }
+    internal void RefreshSettings(double size, double opacity)
+    {
+        sizeLabel!.Label = $"{size:0} DIP size";
+        opacityLabel!.Label = $"{opacity:P0} opacity";
+    }
+    private void CloseSettings()
+    {
+        SettingsPanel.Visibility = Visibility.Collapsed;
+        KeyRows.IsEnabled = true;
     }
     private void ShowResult(InputResult result)
     {

@@ -1,7 +1,7 @@
 # FloatKeys
 
-Milestone 2 functional UK touchscreen keyboard for Windows 11 / .NET 10 / WPF.
-The fixed, non-activating, always-on-top overlay provides QWERTY, digits, UK punctuation,
+Milestone 3 floating UK touchscreen keyboard for Windows 11 / .NET 10 / WPF.
+The draggable, non-activating, always-on-top overlay provides QWERTY, digits, UK punctuation,
 Shift, local Caps Lock, latched Ctrl/Alt, special keys and hold-to-repeat navigation/deletion.
 Focus a target text field before tapping FloatKeys. No application-specific integration is used.
 
@@ -15,8 +15,17 @@ The self-contained build needs no separate .NET installation. Run as an ordinary
 .\artifacts\win-arm64\FloatKeys.exe
 ```
 
-It opens near the bottom-right of the primary display. Focus Notepad or your target
-application, then tap keys. Exit closes the application. There is no launcher or tray.
+It starts with a floating keyboard icon near the right edge of the primary display.
+Tap the icon to show/hide the keyboard; drag the icon to move it. Focus Notepad or your
+target application yourself, then tap keys. Drag the keyboard's header grip to move it
+and its bottom-right diagonal handle to resize it. The header minus button collapses it;
+the launcher remains available above the keyboard. Exit closes both windows.
+
+The gear button opens a small launcher settings panel: use +/− to adjust size
+(48–80 DIPs) and background opacity (65–100%). Tap the gear again to return to typing.
+Positions, dimensions and ABC/Symbols selection are saved automatically in
+`%LOCALAPPDATA%\FloatKeys\settings.json`. Missing/corrupt settings recover to defaults.
+Restart always begins with the keyboard hidden. There is no tray or startup integration.
 Do not run multiple copies while testing.
 
 - **Shift:** tap to latch/unlatch; consumed by the next input, including arrows/Tab.
@@ -48,6 +57,10 @@ dotnet publish src/FloatKeys/FloatKeys.csproj -c Release -r win-arm64 --self-con
 dotnet publish src/FloatKeys/FloatKeys.csproj -c Release -r win-x64 --self-contained true -o artifacts/win-x64
 .\scripts\verify-overlay.ps1 -Executable .\artifacts\win-arm64\FloatKeys.exe
 .\scripts\verify-overlay.ps1 -Executable .\artifacts\win-x64\FloatKeys.exe
+dotnet publish scripts/OverlayProbe/OverlayProbe.csproj -c Release -r win-arm64 --self-contained true -o artifacts/probe-arm64
+dotnet publish scripts/OverlayProbe/OverlayProbe.csproj -c Release -r win-x64 --self-contained true -o artifacts/probe-x64
+.\scripts\verify-overlay.ps1 -Executable .\artifacts\win-arm64\FloatKeys.exe -LifecycleProbe .\artifacts\probe-arm64\FloatKeys.Tests.exe
+.\scripts\verify-overlay.ps1 -Executable .\artifacts\win-x64\FloatKeys.exe -LifecycleProbe .\artifacts\probe-x64\FloatKeys.Tests.exe
 git diff --check
 ```
 
@@ -56,6 +69,9 @@ See [architecture and file inventory](docs/architecture.md),
 and the unchanged [v0.1 specification](docs/specification.md).
 
 Milestone 1 was built and manually tested successfully, as confirmed by the user.
-The updated Milestone 2 keyboard still needs physical touch and application compatibility
-validation. Milestone 3/4 features remain deferred: launcher, dragging/resizing, advanced
-positioning, persistence, settings, themes, tray, startup, installer and release packaging.
+The updated overlay still needs physical touch and application compatibility validation.
+The development probe uses a backend that cannot inject input and isolated settings;
+it checks real HWND lifecycle, native positioning, foreground preservation and offscreen
+layout rendering. It does not simulate physical touch or prove target input delivery.
+Milestone 4 remains deferred: tray, startup, single-instance support, installer, CI release
+automation and release archives. No selectable themes or game integration were added.

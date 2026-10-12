@@ -1,3 +1,92 @@
+# Milestone 3 architecture
+
+## Overlay lifecycle and focus
+
+`OverlayService` owns one launcher and one keyboard for the application's lifetime.
+Both invisible HWNDs receive styles and activation hooks before the first show. Startup
+shows only the launcher; visibility transitions reuse the keyboard/controller. Collapse
+calls Hide, never Close. Exit or native closure shuts down both windows. Explicit WPF
+shutdown keeps the process running when the keyboard is hidden.
+
+The original NOACTIVATE/TOOLWINDOW/TOPMOST policy and MA_NOACTIVATE/PA_NOACTIVATE
+responses remain. Every native positioning operation uses SWP_NOACTIVATE. The hook
+also adds that flag to WM_WINDOWPOSCHANGING, protecting WPF visibility/DPI operations.
+No Activate, Focus, DragMove, native resizing loop, foreground restoration, application
+identification or work-area reservation is used. Native ordering keeps the launcher above
+the keyboard without moving either. Ordering is checked before raising it to prevent
+recursive z-order notifications. Other topmost/exclusive applications remain a limitation.
+
+Hide cancels geometry/key captures, controller sessions, repeat callbacks and Shift/Ctrl/Alt
+latches before hiding. It retries release of owned input, retaining existing failure blocking.
+Local Caps and ABC/Symbols selection survive hiding. Only ABC/Symbols survives restarts.
+WPF may destroy HWNDs before OnExit; final persistence falls back to the last valid snapshot.
+Window disposal and hook removal tolerate that lifecycle and precede backend disposal.
+
+## Gestures, display geometry and appearance
+
+`PointerHandle` admits one initiating mouse/touch device, rejects promoted mouse input,
+uses physical screen coordinates and clears ownership before releasing capture. `MoveGesture`
+is independently testable: 8 DIPs of total movement permanently commits a drag; only an
+uncancelled release inside below that threshold is a tap. Pointer movement changes native
+bounds; one completion/cancellation saves the final position. Key gestures stay separate.
+
+`DisplayService` enumerates native monitor/work rectangles and effective DPI. Desktop X/Y
+remain physical pixels, including negative origins; visual sizes remain DIPs. `OverlayGeometry`
+selects displays by intersection/distance, preserves valid bounds and recovers invalid bounds
+into the nearest working area. Defaults use the primary working area. Intentional movement
+uses full monitor bounds, including ordinary fullscreen content. Rotation, disconnection,
+work-area and DPI notifications coalesce on the dispatcher without timers/polling. WPF owns
+DPI layout updates; recovery runs afterward. Desktop changes cancel interactions; crossing
+a DPI boundary retains a valid geometry gesture. No normal foreground-switch handler exists.
+
+The keyboard uses stretching rows, weighted columns, rounded charcoal surfaces, modifier
+highlights and a dedicated header/resize target. Normal minimum dimensions are 720 x 360
+DIPs; content retains that minimum inside a scrollable viewport if the display is smaller.
+Scrollbars have 44-DIP minimum touch targets. The circular launcher defaults to 56 DIPs
+with 85% background opacity; its vector icon stays opaque. The keyboard's gear opens an
+inline panel with size and opacity step buttons, disables covered keys and cancels input.
+No third settings window, appearance editor, animation or rendering dependency was added.
+
+## Settings and test boundaries
+
+`AppSettings` contains explicitly named physical positions, DIP dimensions, opacity,
+UK layout identity, ABC/Symbols state and the fixed dark theme. SettingsService uses
+System.Text.Json at `%LOCALAPPDATA%\FloatKeys\settings.json`, validates fields independently,
+and defaults missing/corrupt documents. Temporary files are flushed then replaced/renamed
+on the same filesystem. I/O failure is logged without blocking the utility; failed saves
+can be retried on the next save boundary. Equal validated snapshots cause no file writes.
+No input text, clipboard, history, Caps, modifier latches or visibility is persisted.
+
+xUnit covers pure geometry, gesture, persistence, visibility and controller cleanup.
+The optional development probe uses the existing test-only internals grant, an isolated
+settings file and a backend that throws on input injection. It checks real HWNDs, 50
+visibility cycles, native movement/resizing, ordering, unchanged settings write counts,
+foreground preservation and renders. Callback driving tests service integration; it does
+not reproduce WPF physical touch routing, real display rotation or target-app consumption.
+
+## Milestone 3 file inventory
+
+Created:
+- `src/FloatKeys/Windows/LauncherWindow.xaml`, `LauncherWindow.xaml.cs`
+- `src/FloatKeys/Controls/PointerHandle.cs`, `Input/MoveGesture.cs`
+- `src/FloatKeys/Models/AppSettings.cs`
+- `src/FloatKeys/Platform/DisplayService.cs`, `OverlayGeometry.cs`
+- `src/FloatKeys/Services/SettingsService.cs`, `OverlayVisibility.cs`
+- `tests/FloatKeys.Tests/PolishedOverlayTests.cs`, `SettingsTests.cs`
+- `scripts/OverlayProbe/OverlayProbe.csproj`, `Program.cs`
+
+Modified:
+- App XAML/lifecycle, OverlayService, KeyboardWindow XAML/code-behind, NativeMethods
+- KeyboardController (optional initial symbols selection only), KeyboardTests
+- `scripts/verify-overlay.ps1`, README and architecture/compatibility documentation
+
+The input backend, native input ABI, key mappings, key control and repeat scheduler remain
+unchanged. No Milestone 4 feature was introduced. The small-display scroll fallback and
+local Caps interpretation are explicit; the latter is the pre-existing approved deviation.
+
+The following Milestone 2 record is historical; the overlay changes above supersede its
+fixed-window and lack-of-persistence descriptions.
+
 # Milestone 2 architecture
 
 ## Preserved Milestone 1 boundary

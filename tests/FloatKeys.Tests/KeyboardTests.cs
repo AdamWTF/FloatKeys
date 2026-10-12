@@ -5,6 +5,32 @@ namespace FloatKeys.Tests;
 
 public sealed class KeyboardTests
 {
+    [Fact]
+    public void HideStopsRepeatsAndLatchesButRetainsCapsLayoutAndController()
+    {
+        var backend = new Backend(); var scheduler = new Scheduler();
+        using var controller = new KeyboardController(backend, scheduler, symbols: true);
+        Tap(controller, KeyboardLayout.Caps);
+        for (int i = 0; i < 50; i++)
+        {
+            var state = new FloatKeys.Services.OverlayVisibility(() => { }, controller.CancelAll, () => { });
+            state.Show();
+            Tap(controller, "Ctrl"); Tap(controller, "Alt"); Tap(controller, "Shift");
+            Assert.True(controller.Begin(5, Find("backspace")));
+            var stale = scheduler.Ticks.Last();
+            state.Hide();
+            int count = backend.Calls.Count;
+            stale.Fire(); controller.End(5, true);
+            Assert.Equal(count, backend.Calls.Count);
+            Assert.Equal(0, controller.InteractionCount);
+            Assert.False(controller.Shift || controller.Ctrl || controller.Alt);
+            Assert.True(controller.Caps); Assert.True(controller.Symbols);
+            state.Show(); Tap(controller, "a");
+            Assert.Equal(count + 1, backend.Calls.Count);
+            Assert.Equal(new[] { KeyboardLayout.ShiftKey }, backend.Calls.Last().Modifiers);
+        }
+        Assert.True(backend.Cleanups >= 50);
+    }
     private sealed class Backend : IInputBackend
     {
         internal readonly List<(InputKey Key, InputKey[] Modifiers)> Calls = [];

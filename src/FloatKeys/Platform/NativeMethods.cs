@@ -4,6 +4,38 @@ namespace FloatKeys.Platform;
 
 internal static class NativeMethods
 {
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Rect { internal int Left, Top, Right, Bottom; internal readonly PixelRect Pixels => new(Left, Top, Right - Left, Bottom - Top); }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct MonitorInfo
+    {
+        internal int Size;
+        internal Rect Monitor, Work;
+        internal uint Flags;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WindowPosition
+    {
+        internal nint Hwnd, InsertAfter;
+        internal int X, Y, Width, Height;
+        internal uint Flags;
+    }
+    internal delegate bool MonitorCallback(nint monitor, nint hdc, nint rect, nint data);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EnumDisplayMonitors(nint hdc, nint clip, MonitorCallback callback, nint data);
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+    [DllImport("shcore.dll")]
+    internal static extern int GetDpiForMonitor(nint monitor, int type, out uint x, out uint y);
+    [DllImport("user32.dll")]
+    internal static extern uint GetDpiForWindow(nint hwnd);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetWindowRect(nint hwnd, out Rect rect);
+    [DllImport("user32.dll")]
+    internal static extern nint GetWindow(nint hwnd, uint command);
     internal const uint KeyboardInput = 1;
     internal const uint ExtendedKey = 0x0001;
     internal const uint KeyUp = 0x0002;

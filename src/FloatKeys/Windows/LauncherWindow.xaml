@@ -1,0 +1,18 @@
+<Window x:Class="FloatKeys.Windows.LauncherWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FloatKeys — Launcher" Width="56" Height="56"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowActivated="False" ShowInTaskbar="False" Focusable="False"
+        KeyboardNavigation.TabNavigation="None" KeyboardNavigation.DirectionalNavigation="None">
+    <Grid x:Name="TouchSurface" Background="Transparent">
+        <Ellipse x:Name="Surface" Fill="#20252E" Stroke="#8796AB" StrokeThickness="1" Opacity="0.85" Margin="1" />
+        <Viewbox Margin="12" IsHitTestVisible="False">
+            <Canvas Width="32" Height="24">
+                <Rectangle Width="32" Height="24" RadiusX="4" RadiusY="4" Stroke="#F5F7FA" StrokeThickness="2" />
+                <Path Stroke="#F5F7FA" StrokeThickness="2.5"
+                      Data="M 6,7 L 9,7 M 12,7 L 15,7 M 18,7 L 21,7 M 24,7 L 27,7 M 6,12 L 9,12 M 12,12 L 15,12 M 18,12 L 21,12 M 24,12 L 27,12 M 8,18 L 24,18" />
+            </Canvas>
+        </Viewbox>
+    </Grid>
+</Window>
